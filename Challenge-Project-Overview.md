@@ -80,81 +80,105 @@ _Working artifacts_
 - Portfolio-ready writeup
 - Each fellow can speak to their owned agent in interviews and on LinkedIn ("I designed and validated the Faithfulness Verifier agent against human-annotated medical text").
 
+### Stretch Goals
+
+For teams that progress quickly:
+- Multilingual extension — add Spanish generation with a parallel Verifier (biggest equity impact; Spanish-speaking US populations face larger health-literacy gaps).   
+- Personalization layer — adjustable target reading level and tone (formal / conversational) through the Readability agent.   
+- Agent debate variant — replace single Verifier with a two-agent debate  compare against single-Verifier ablation.   
+- Bias & fairness audit — does the pipeline perform worse on reports involving non-English names, rare conditions, or specific demographic markers? Run a structured audit and publish findings.   
+- LoRA fine-tuning experiment — fine-tune a small open model (e.g., Gemma-2-2B) on patient-friendly explanation pairs and compare against prompt-only baselines.   
+- Domain expansion — apply the pipeline to a high-impact subdomain (oncology discharge summaries, post-partum care instructions, pediatric medication labels).   
+- Tool-augmented agents — give the Extractor a UMLS lookup tool and the Verifier a DrugBank lookup tool; measure whether tools improve verification accuracy.
+
 ### Project Milestones
 Use these milestones to guide your work. Your team will create a GitHub Projects board to track tasks within each milestone.
 
 | Month | Milestone | Key Activities |
-| :--- | :--- | :--- |
-| September | Data Processing, Medical Knowledge Indexing & Baseline Setup | • Ingest and preprocess clinical QA and medical reasoning datasets (e.g., MedQA, PubMedQA, or EHR clinical notes).<br>• Construct a vector retrieval index (ChromaDB / pgvector) over authoritative medical literature and clinical practice guidelines.<br>• Implement a single-agent baseline LLM for generating medical answers and explanations.<br>• Establish evaluation benchmarks for explanation faithfulness, clinical accuracy, and hallucination rates. |
-| October | Multi-Agent Architecture & Faithfulness Verification Loop | • Construct a multi-agent orchestration framework (e.g., using LangGraph or CrewAI) with specialized sub-agents: Data/Context Retriever, Clinical Reasoning Specialist, and Faithfulness Verifier.<br>• Implement inter-agent reflection and stance verification loops to ensure explanations strictly align with retrieved clinical evidence.<br>• Conduct prompt optimization and error analysis to minimize ungrounded medical claims. |
-| November / December | System Evaluation, Interactive Dashboard & Capstone Deliverables | • Benchmark the FaithfulMed multi-agent architecture against single-agent baselines across clinical accuracy, explanation quality, and citation fidelity.<br>• Develop an interactive Streamlit application to display clinical queries, step-by-step multi-agent reasoning traces, and evidence attributions.<br>• Package a clean, reproducible GitHub repository with modular agent code, full technical documentation, and stakeholder presentation deck. |
-
-### Stretch Goals
-* **Multimodal Clinical Data Integration:** Extend the multi-agent system to process visual medical assets (e.g., radiology images or ECG waveforms) alongside textual patient records for joint multimodal explanations.
-* **Real-Time Guardrail Middleware:** Deploy the verifier agent as an automated middleware layer that intercepts and flags unverified clinical claims before presenting final recommendations.
-* **Counterfactual Medical Explanation Visualizer:** Build an interactive UI module that demonstrates how modifications to patient lab parameters or clinical history dynamically alter the multi-agent reasoning path.
+|---|---|---|
+| September | Foundations & Single-Agent Baseline | • Onboard the team: GitHub repo, Colab environment, and free-tier API access (Groq for Llama-3, Hugging Face Inference API).<br>• Exploratory data analysis on MTSamples, MedQuAD, PLABA, and a Synthea-generated synthetic-patient sample.<br>• Define the task spec, success rubric, and shared evaluation harness: Flesch-Kincaid, SMOG, medical-jargon density, output length, refusal rate.<br>• Build a single-LLM baseline (no agents) on ~50 hand-curated examples — this becomes the comparison point for the multi-agent system.<br>• Each fellow chooses one of the five agents to own end-to-end through the project. |
+| October | Multi-Agent Pipeline & Verifier Calibration | • Implement Extractor Agent: structured-output prompting that returns a list of clinical atoms with types.<br>• Implement Simplifier Agent with RAG over MedlinePlus lay-language glossary.<br>• Implement Verifier Agent: LLM-as-judge module inspired by FaithJudge, scoring faithfulness, omission, addition, and reading-level match.<br>• Create a 100-example human-annotated test set across the team for Verifier calibration; target ≥80% agreement with human labels (Cohen's κ ≥ 0.6).<br>• Wire up the Refiner and Readability agents with bounded iteration limits.<br>• Run the first end-to-end multi-agent vs. baseline comparison across 3+ open models. |
+| November | Ablations, Demo & Deliverables | • Ablation studies: drop one agent at a time and measure impact on each metric — this is the research contribution.<br>• Error analysis: which clinical content types (lab values, drug names, procedures) produce the most hallucinations? Which agent catches them?<br>• Build an App demo on Hugging Face Spaces (free) showing per-agent traces, faithfulness scores, and flagged passages.<br>• Final deliverables: GitHub repo with reproducible Colab notebooks, technical report, FaithfulMed leaderboard, ablation table, and team presentation.<br>• Optional : arXiv paper draft |
 
 > **Note for the team:** Please create a GitHub Projects board in this repository to break these milestones into weekly tasks. Go to the **Projects** tab → **New project** → Choose **Board** → Add columns for each month.
 
 ---
 
 ## 📊 Dataset
-**Name and Source:** MTSamples, Synthea, MedQuAD, and PLABA datasets.  
-**Format:** FHIR (JSON-based clinical standards)  
+**Name and Source:** [TBD]  
+**Format:** Text, FHIR (JSON-based clinical standards)  
 **Size:** under 1gb  
-**Location:** [Internal project repository and public research mirrors]  
+**Location:** https://www.mtsamples.com/, https://synthetichealth.github.io/synthea/
 
 ### Key Details
-- Publicly available de-identified clinical text including MTSamples transcribed medical reports, Synthea synthetic patient records, MedQuAD consumer health Q&A, and the PLABA plain-language adaptation corpus, in FHIR format.
-- Data requires strict handling of medical terminology, with preprocessing focused on converting structured FHIR resources into readable text blocks for LLM consumption.
-
+- [Brief description of what's in the data]
+- [Any known limitations or preprocessing needed]
+- [Link to data dictionary or documentation, if available]
+  
 ---
 
 ## 🛠️ Suggested Approach
-**ML Problem Type:** NLP & RAG / Multi-Agent Systems  
-**Recommended Libraries:**
-- Open-source LLMs (Llama-3, Mistral, Gemma)
-- Retrieval-Augmented Generation (RAG)
-- Prompt Engineering
-- Python
-- GitHub
-- Colab
-- Hugging Face Inference API
-- Hugging Face Spaces
-**Evaluation Metrics:** Flesch-Kincaid Readability Score, Factual Fidelity (Faithfulness), Hallucination Rate, and Verifier-Human Agreement (%).
 
+**ML Problem Type:** [e.g., Classification, Regression, NLP, Computer Vision, LLM/RAG]
+
+**Recommended Libraries:**
+- [e.g., pandas, scikit-learn, TensorFlow, Hugging Face]
+
+**Evaluation Metrics:**
+- [e.g., Accuracy, Precision/Recall, RMSE, BLEU score]
+  
 ---
 
 ## 📚 Resources to Get Started
+
 The following resources will help your team understand the problem space and potential technical approaches for this project:
+
 **Background Reading:**
-- Research on LLM hallucinations in clinical settings and the impact of health literacy on patient outcomes.
+- [e.g., Link to an article or blog post about the problem domain]
+- [e.g., Link to an industry report or case study]
+
 **Technical Tutorials:**
-- Documentation for LangGraph or similar multi-agent orchestration frameworks.
+- [e.g., Link to a free tutorial on the ML technique(s) involved]
+- [e.g., Link to documentation for a key library or tool]
+
 **Code Examples:**
-- Hugging Face Transformers documentation and reference implementations for RAG-based architectures.
+- [e.g., Link to a relevant GitHub repo]
+- [e.g., Link to a sample implementation or starter code]
+
+**Other:**
+- [Links to any additional resources — e.g., papers, videos, podcasts, etc.]
+
+*Feel free to explore beyond these, and share anything interesting you find with me!*
 
 ---
 
 ## 🤝 How We'll Work Together
-**Check-ins:** During our biweekly 60-min AI Studio Lab Section meeting block (2nd and 4th week of every month)  
-**Communication:** Email and designated team Slack/Teams channel  
-**Response time:** 48 hours for non-urgent technical inquiries  
-**Recommended Tools:**
-- **Coding:** Google Colab Free Tier  
-- **Collaboration:** GitHub, Notion  
-- **Virtual Meetings:** Zoom, Google Meet  
+
+**Official check-ins:** During our biweekly 45-minute AI Studio Lab Section meeting block (2nd and 4th week of every month)
+
+ **Other ways to reach out to me with questions:** 
+* [e.g., Your team's channel within Break Through Tech’s Discord space]
+* [e.g., Email; please copy your teammates and AI Studio Coach]
+* [e.g., Request a team check-in on Zoom]
+* [Note: I will aim to respond within 48 hours. Please reach out to your AI Studio Coach with urgent questions.]
+
+> 💡 **Challenge Advisor: Please update the above based on your availability and preference. If you are not able to answer questions or meet with fellows outside of the biweekly Lab Section check-ins, simply write in "N/A (only available during the official check-in times)"**
+
+**Recommended free coding / collaboration tools**
+* […]
+* […]
 
 ---
 
 ## 🚀 Getting Started
-1. **Review this overview document** and note any questions for our first meeting.
-2. **Begin reviewing the dataset** using the link provided in the Dataset section.
-3. **Read the GitHub Projects documentation** [here](https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects).
 
-I'm excited to work with you!
+1. **Review this overview document** and note any questions for our first meeting
+2. **Begin reviewing the dataset** using the link above
+3. **Read the GitHub Projects documentation** [here](https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects)
+
+I’m excited to work with you!
 
 ---
 
 ## ❓ Questions?
-Please bring any questions to our first meeting during the week of August 24th (Break Through Tech's Bridge to Studio - Session B).
+Please bring any questions to our first meeting during the week of August 24th (Break Through Tech's Bridge to Studio - Session C).
