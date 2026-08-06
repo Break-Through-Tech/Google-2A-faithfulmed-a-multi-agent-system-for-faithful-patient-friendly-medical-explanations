@@ -60,12 +60,17 @@ Readability: ≥80% of outputs at ≤8th-grade reading level (Flesch-Kincaid). F
 
 ### Project Milestones
 Use these milestones to guide your work. Your team will create a GitHub Projects board to track tasks within each milestone.
+
 | Month | Milestone | Key Activities |
-|-------|-----------|----------------|
-| **September** | Data Exploration & Preprocessing | Develop ingestion pipelines for FHIR-formatted medical datasets and implement rigorous data cleaning and outlier detection protocols. |
-| **October** | Feature Engineering & Baseline Modeling | Construct the multi-agent orchestration layer and establish baseline model performance using single-agent configurations for comparison. |
-| **November** | Model Optimization & Evaluation | Execute iterative hyperparameter tuning, perform rigorous faithfulness testing, and optimize agent decision paths based on validation scores. |
-| **December** | Insights, Deliverables & Presentation | Finalize the technical report, package the Hugging Face Space demonstration, and prepare actionable business recommendations for the stakeholders. |
+| :--- | :--- | :--- |
+| September | Data Processing, Medical Knowledge Indexing & Baseline Setup | • Ingest and preprocess clinical QA and medical reasoning datasets (e.g., MedQA, PubMedQA, or EHR clinical notes).<br>• Construct a vector retrieval index (ChromaDB / pgvector) over authoritative medical literature and clinical practice guidelines.<br>• Implement a single-agent baseline LLM for generating medical answers and explanations.<br>• Establish evaluation benchmarks for explanation faithfulness, clinical accuracy, and hallucination rates. |
+| October | Multi-Agent Architecture & Faithfulness Verification Loop | • Construct a multi-agent orchestration framework (e.g., using LangGraph or CrewAI) with specialized sub-agents: Data/Context Retriever, Clinical Reasoning Specialist, and Faithfulness Verifier.<br>• Implement inter-agent reflection and stance verification loops to ensure explanations strictly align with retrieved clinical evidence.<br>• Conduct prompt optimization and error analysis to minimize ungrounded medical claims. |
+| November / December | System Evaluation, Interactive Dashboard & Capstone Deliverables | • Benchmark the FaithfulMed multi-agent architecture against single-agent baselines across clinical accuracy, explanation quality, and citation fidelity.<br>• Develop an interactive Streamlit application to display clinical queries, step-by-step multi-agent reasoning traces, and evidence attributions.<br>• Package a clean, reproducible GitHub repository with modular agent code, full technical documentation, and stakeholder presentation deck. |
+
+### Stretch Goals
+* **Multimodal Clinical Data Integration:** Extend the multi-agent system to process visual medical assets (e.g., radiology images or ECG waveforms) alongside textual patient records for joint multimodal explanations.
+* **Real-Time Guardrail Middleware:** Deploy the verifier agent as an automated middleware layer that intercepts and flags unverified clinical claims before presenting final recommendations.
+* **Counterfactual Medical Explanation Visualizer:** Build an interactive UI module that demonstrates how modifications to patient lab parameters or clinical history dynamically alter the multi-agent reasoning path.
 
 > **Note for the team:** Please create a GitHub Projects board in this repository to break these milestones into weekly tasks. Go to the **Projects** tab → **New project** → Choose **Board** → Add columns for each month.
 
