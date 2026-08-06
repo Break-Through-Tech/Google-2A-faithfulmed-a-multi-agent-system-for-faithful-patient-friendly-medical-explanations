@@ -47,16 +47,38 @@ The project addresses a critical industry need with a sophisticated architectura
 ---
 
 ## 🏢 About Google
-Google is a global technology leader focused on organizing the world's information and making it universally accessible and useful. This project aligns with Google’s commitment to advancing healthcare AI, specifically by aiming to bridge the critical health literacy gap through machine learning that makes clinical data more understandable for patients.
+Google is a global technology leader focused on organizing the world's information and making it universally accessible and useful. 
 
 ---
 
 ## 🎯 The Challenge
 ### Project Summary
-This project involves building a multi-agent LLM architecture that transforms complex, clinical-grade medical documents into patient-friendly explanations. By coordinating specialized agents for extraction, simplification, and verification, the system utilizes RAG and open-source models to ensure outputs are both easy to read and clinically accurate, directly addressing the risks of hallucination in patient-facing AI.
+In this project, you will use publicly available de-identified clinical text (MTSamples transcribed medical reports, Synthea synthetic patient records, MedQuAD consumer health Q&A, and the PLABA plain-language adaptation corpus) and a multi-agent LLM architecture combining retrieval-augmented generation, prompt engineering, source-grounded faithfulness verification, and iterative agent-based refinement using open-source models (Llama-3, Mistral, Gemma) to build a system in which specialized agents (Extractor, Simplifier, Verifier, Refiner, Readability) collaborate to produce patient-friendly explanations of clinical documents that are simultaneously easy to read and provably faithful to the source. This will help our organization address the well-documented health-literacy gap — where patients routinely misunderstand discharge instructions, lab results, and care plans written above their reading level — while tackling the central blocker to deploying LLMs for patient-facing use: hallucinated or unfaithful information that could harm patients if trusted.
 
 ### Success Criteria
-Readability: ≥80% of outputs at ≤8th-grade reading level (Flesch-Kincaid). Faithfulness: ≥85% factual fidelity on the human-annotated test set. Hallucination rate: <10% of outputs contain a clinically meaningful unsupported claim. Multi-agent vs. single-agent baseline: ≥15% absolute improvement in faithfulness score. Verifier agent agreement with human annotators: ≥80%.
+A successful December outcome includes:
+
+_Quantitative system performance_
+- Readability: ≥80% of outputs at ≤8th-grade reading level (Flesch-Kincaid).
+- Faithfulness: ≥85% factual fidelity on the human-annotated test set, verified against human labels.
+- Hallucination rate: <10% of outputs contain a clinically meaningful unsupported claim.
+- Multi-agent vs. single-agent baseline: ≥15% absolute improvement in faithfulness score.
+
+_Verifier agent quality_
+- Verifier agrees with human annotators ≥80% of the time on faithfulness labels.
+
+_Ablation analysis (research contribution)_
+- A complete ablation table showing the marginal contribution of each agent — answers the question "which agents matter most for faithfulness vs. readability?"
+
+_Comparative analysis_
+- Published leaderboard across ≥3 open models showing faithfulness, readability, latency, and cost tradeoffs.
+
+_Working artifacts_
+- Public GitHub repo with reproducible code and one notebook per agent.
+- Hosted demo on Hugging Face Spaces showing per-agent traces.
+- Technical report (~10 pages) including the ablation study, final team presentation.
+- Portfolio-ready writeup
+- Each fellow can speak to their owned agent in interviews and on LinkedIn ("I designed and validated the Faithfulness Verifier agent against human-annotated medical text").
 
 ### Project Milestones
 Use these milestones to guide your work. Your team will create a GitHub Projects board to track tasks within each milestone.
