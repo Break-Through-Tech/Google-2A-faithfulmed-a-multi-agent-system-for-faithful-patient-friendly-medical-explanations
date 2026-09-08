@@ -15,6 +15,8 @@
 | Rudra Patel      | @rudra-045    | .... |
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
+| Shayna Jain      | @shaynajain   | .... |
+| Lauren Cullari   |      | .... |
 
 ---
 
