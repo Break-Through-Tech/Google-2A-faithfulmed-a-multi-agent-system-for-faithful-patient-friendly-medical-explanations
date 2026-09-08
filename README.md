@@ -16,7 +16,7 @@
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
 | Shayna Jain      | @shaynajain   | .... |
-| Lauren Cullari   |      | .... |
+| Lauren Cullari   | @lcullari     | .... |
 
 ---
 
