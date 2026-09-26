@@ -11,7 +11,7 @@
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
 | Aanchal Puri     | @aanchalpuri  | ....   |
-| Arshiya Salehi   | @arshiya-salehi | .... |
+| Arshiya Salehi   | @arshiya-salehi | working on synthea data generation |
 | Rudra Patel      | @rudra-045    | .... |
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
