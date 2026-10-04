@@ -16,7 +16,7 @@
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
 | Shayna Jain      | @shaynajain   | .... |
-| Lauren Cullari   | @lcullari     | .... |
+| Lauren Cullari   | @lcullari     | Did an exploratory data analysis on MedAESQA, curated the ~50 sample dataset for the single-agent baseline using MTSamples with Shayna. |
 
 ---
 
