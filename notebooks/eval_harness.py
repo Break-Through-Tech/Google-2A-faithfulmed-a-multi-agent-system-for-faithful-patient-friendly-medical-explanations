@@ -42,6 +42,78 @@ def meets_readability_target(text: str, max_grade: float = 8.0) -> bool:
     """Success criterion: <= 8th-grade reading level (Flesch-Kincaid)."""
     return textstat.flesch_kincaid_grade(text) <= max_grade
 
+def is_refusal(text: str) -> bool:
+    """Return True if the model appears to refuse the requested task."""
+    refusal_phrases = [
+        "i can't provide",
+        "i cannot provide",
+        "i can't assist",
+        "i cannot assist",
+        "i can't help",
+        "i cannot help",
+        "i'm unable to",
+        "i am unable to",
+        "i'm not able to",
+        "i am not able to",
+        "i can't answer",
+        "i cannot answer",
+    ]
+
+    text_lower = text.lower().strip()
+
+    return any(phrase in text_lower for phrase in refusal_phrases)
+
+def evaluate_outputs(outputs: list[str]) -> dict:
+    """Evaluate model outputs and return aggregate metrics."""
+
+    if not outputs:
+        raise ValueError("outputs cannot be empty")
+
+    # Separate refusals from valid responses
+    valid_outputs = [text for text in outputs if not is_refusal(text)]
+    num_refusals = len(outputs) - len(valid_outputs)
+
+    # Calculate refusal rate using ALL outputs
+    refusal_rate = num_refusals / len(outputs)
+
+    # Handle the case where every output was a refusal
+    if not valid_outputs:
+        return {
+            "num_outputs": len(outputs),
+            "num_valid_outputs": 0,
+            "num_refusals": num_refusals,
+            "refusal_rate": refusal_rate,
+        }
+
+    # Calculate readability only on valid responses
+    scores = [readability_scores(text) for text in valid_outputs]
+
+    return {
+        "num_outputs": len(outputs),
+        "num_valid_outputs": len(valid_outputs),
+        "num_refusals": num_refusals,
+        "refusal_rate": refusal_rate,
+
+        "avg_flesch_kincaid": sum(
+            score["flesch_kincaid_grade"] for score in scores
+        ) / len(scores),
+
+        "percent_at_or_below_grade_8": sum(
+            meets_readability_target(text) for text in valid_outputs
+        ) / len(valid_outputs) * 100,
+
+        "avg_smog": sum(
+            score["smog_index"] for score in scores
+        ) / len(scores),
+
+        "avg_jargon_density": sum(
+            score["jargon_density"] for score in scores
+        ) / len(scores),
+
+        "avg_word_count": sum(
+            score["word_count"] for score in scores
+        ) / len(scores),
+    }
 
 def load_medaesqa(path: Path = DATA) -> list[dict]:
     if not path.exists():
