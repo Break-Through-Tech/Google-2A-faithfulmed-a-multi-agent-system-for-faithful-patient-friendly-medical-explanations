@@ -14,6 +14,7 @@ This is model-agnostic — it scores text, whatever produced it. Extend, don't t
 Each agent owner plugs their agent's outputs into this harness.
 """
 from __future__ import annotations
+import csv
 import json
 from pathlib import Path
 
@@ -62,6 +63,19 @@ def is_refusal(text: str) -> bool:
     text_lower = text.lower().strip()
 
     return any(phrase in text_lower for phrase in refusal_phrases)
+
+def load_baseline_outputs(path: Path) -> list[str]:
+    """Load simplified model outputs from the baseline CSV."""
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        outputs = [
+            row["simplified_transcription"]
+            for row in reader
+            if row["simplified_transcription"].strip()
+        ]
+
+    return outputs
 
 def evaluate_outputs(outputs: list[str]) -> dict:
     """Evaluate model outputs and return aggregate metrics."""
@@ -115,6 +129,16 @@ def evaluate_outputs(outputs: list[str]) -> dict:
         ) / len(scores),
     }
 
+def review_outputs(outputs: list[str]) -> None:
+    """Review baseline outputs one at a time."""
+    for i, output in enumerate(outputs, start=1):
+        print("\n" + "=" * 80)
+        print(f"OUTPUT {i}/{len(outputs)}")
+        print("=" * 80)
+        print(output)
+
+        input("\nPress Enter for next output...")
+
 def load_medaesqa(path: Path = DATA) -> list[dict]:
     if not path.exists():
         raise FileNotFoundError(
@@ -152,3 +176,15 @@ if __name__ == "__main__":
         print(f"Loaded MedAESQA: {len(data)} questions.")
     except FileNotFoundError as e:
         print(e)
+
+    baseline_path = Path(__file__).resolve().parent.parent / "data" / "mtsamples_baseline_outputs.csv"
+
+    outputs = load_baseline_outputs(baseline_path)
+
+    print("Baseline outputs loaded:", len(outputs))
+
+    results = evaluate_outputs(outputs)
+
+    print("\nBaseline Evaluation Results:")
+    for metric, value in results.items():
+        print(f"{metric}: {value}")
