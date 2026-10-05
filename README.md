@@ -15,7 +15,7 @@
 | Rudra Patel      | @rudra-045    | .... |
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
-| Shayna Jain      | @shaynajain   | .... |
+| Shayna Jain      | @shaynajain   | Created medaesqa_eda.ipynb; developed mtsamples_baseline.ipynb, including dataset curation and single-agent Gemini baseline generation. |
 | Lauren Cullari   | @lcullari     | Did an exploratory data analysis on MedAESQA, curated the ~50 sample dataset for the single-agent baseline using MTSamples with Shayna. |
 
 ---
