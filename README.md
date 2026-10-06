@@ -10,7 +10,7 @@
 
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
-| Aanchal Puri     | @aanchalpuri  | ....   |
+| Aanchal Puri     | @aanchalpuri  | Developed the vector retrieval index using Gemini embeddings and ChromaDB (RAG pipeline) over the MedlinePlus glossary and health guidelines  |
 | Arshiya Salehi   | @arshiya-salehi | .... |
 | Rudra Patel      | @rudra-045    | .... |
 | Jia Panjwani     | @jiap6        | .... |
