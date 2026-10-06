@@ -8,7 +8,7 @@
 |------------------|---------------|--------------------------------------------------------------------------|
 | Aanchal Puri     | @aanchalpuri  | Developed the vector retrieval index using Gemini embeddings and ChromaDB (RAG pipeline) over the MedlinePlus glossary and health guidelines  |
 | Arshiya Salehi   | @arshiya-salehi | .... |
-| Rudra Patel      | @rudra-045    | .... |
+| Rudra Patel      | @rudra-045    | Added refusal detection and aggregate scoring to the shared evaluation harness; integrated and evaluated the 50 single-agent Gemini baseline outputs. |
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | .... |
 | Shayna Jain      | @shaynajain   | Created medaesqa_eda.ipynb; developed mtsamples_baseline.ipynb, including dataset curation and single-agent Gemini baseline generation. |
