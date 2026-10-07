@@ -77,6 +77,57 @@ def load_baseline_outputs(path: Path) -> list[str]:
 
     return outputs
 
+def load_baseline_records(path: Path) -> list[dict]:
+    """Load baseline samples with original and simplified transcriptions."""
+    with open(path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+
+        records = [
+            {
+                "sample_name": row["sample_name"],
+                "original_transcription": row["transcription"],
+                "simplified_output": row["simplified_transcription"],
+            }
+            for row in reader
+            if row["simplified_transcription"].strip()
+        ]
+
+    return records
+
+def evaluate_records(records: list[dict]) -> list[dict]:
+    """Evaluate each baseline output individually."""
+    results = []
+
+    for record in records:
+        output = record["simplified_output"]
+
+        scores = readability_scores(output)
+        refusal = is_refusal(output)
+
+        results.append({
+            "sample_name": record["sample_name"],
+            "original_transcription": record["original_transcription"],
+            "simplified_output": output,
+            "flesch_kincaid": scores["flesch_kincaid_grade"],
+            "smog": scores["smog_index"],
+            "jargon_density": scores["jargon_density"],
+            "word_count": scores["word_count"],
+            "meets_grade_8": scores["flesch_kincaid_grade"] <= 8.0,
+            "refusal": refusal,
+        })
+
+    return results
+
+def save_evaluation_results(results: list[dict], output_path: Path) -> None:
+    """Save detailed evaluation results to a CSV file."""
+    if not results:
+        return
+
+    with open(output_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=results[0].keys())
+        writer.writeheader()
+        writer.writerows(results)
+
 def evaluate_outputs(outputs: list[str]) -> dict:
     """Evaluate model outputs and return aggregate metrics."""
 
@@ -184,6 +235,15 @@ if __name__ == "__main__":
     print("Baseline outputs loaded:", len(outputs))
 
     results = evaluate_outputs(outputs)
+
+    records = load_baseline_records(baseline_path)
+    detailed_results = evaluate_records(records)
+
+    results_path = Path(__file__).resolve().parent.parent / "data" / "baseline_evaluation_results.csv"
+
+    save_evaluation_results(detailed_results, results_path)
+
+    print(f"Detailed evaluation results saved to: {results_path}")
 
     print("\nBaseline Evaluation Results:")
     for metric, value in results.items():
