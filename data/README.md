@@ -27,6 +27,8 @@ Large corpora are git-ignored — download them locally into this folder.
 - **MedQuAD** — ~47k consumer-health Q&A. https://github.com/abachaa/MedQuAD.
 - **Synthea** — synthetic patient records (FHIR). https://synthetichealth.github.io/synthea/.
   **FHIR is deeply nested — write a flattener before feeding to the LLM. Never pass raw FHIR.**
+  The FHIR output is not committed. To run `notebooks/eda/analyze_synthea_data.ipynb`, put
+  generated bundles in `data/synthea/output/fhir/` (or set `SYNTHEA_FHIR_DIR` to their location).
 - **MedlinePlus glossary** — lay-language definitions; the RAG knowledge base for the Simplifier.
   https://medlineplus.gov/.
 

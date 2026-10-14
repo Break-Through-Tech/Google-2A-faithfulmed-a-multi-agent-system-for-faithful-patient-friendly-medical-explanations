@@ -1,0 +1,8 @@
+metric,count,pct_of_relevant
+top-level missing fields (any question),0,
+non yes/no is_answer_accurate,0,0.0
+sentences with null citation_assessment,1149,22.25881441301821
+sentences with null relevance label,244,4.726850058117009
+citation rows with empty evidence_support,1960,20.39329934450109
+citation rows with null PMID,0,0.0
+nuggets without UMLS CUI marker,0,0.0
