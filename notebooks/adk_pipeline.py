@@ -15,9 +15,13 @@ Docs: https://google.github.io/adk-docs
 Note: ADK's exact class/kwarg names evolve — check the docs for your installed version. The intent
 (SequentialAgent for the DAG, LoopAgent with a hard iteration cap for the refine step) is the point.
 """
+import os
+
 from google.adk.agents import LlmAgent, SequentialAgent, LoopAgent
 
-MODEL = "gemini-2.0-flash"  # start on the free tier; swap per-agent for the leaderboard
+from agents.readability.agent import root_agent as readability
+
+MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
 
 # 1) Extractor — pull clinical "atoms" (facts + types) from the source document.
 extractor = LlmAgent(
@@ -42,12 +46,12 @@ simplifier = LlmAgent(
     output_key="draft",
 )
 
-# 3) Verifier — LLM-as-judge: is every claim in {draft} supported by {atoms}? Flag omissions/additions.
+# 3) Verifier — LLM-as-judge: check the post-readability draft against {atoms}.
 verifier = LlmAgent(
     name="Verifier",
     model=MODEL,
     instruction=(
-        "Compare {draft} against {atoms}. Return JSON: {faithful: bool, unsupported_claims: [...], "
+        "Compare {readability_draft} against {atoms}. Return JSON: {faithful: bool, unsupported_claims: [...], "
         "omissions: [...], reading_level_ok: bool}. Be strict: an unsupported clinical claim is a failure."
     ),
     output_key="verdict",
@@ -58,10 +62,11 @@ refiner = LlmAgent(
     name="Refiner",
     model=MODEL,
     instruction=(
-        "Given {draft} and {verdict}, produce a corrected draft that removes unsupported claims and "
-        "restores omissions, changing nothing else. If {verdict.faithful} is true, return {draft} unchanged."
+        "Given {readability_draft} and {verdict}, produce a corrected draft that removes unsupported "
+        "claims and restores omissions, changing nothing else. If {verdict.faithful} is true, return "
+        "{readability_draft} unchanged."
     ),
-    output_key="draft",  # overwrites the draft so the loop re-verifies the corrected version
+    output_key="readability_draft",
 )
 
 # Bounded refine loop: Verifier -> Refiner, at most twice. This is the ONLY loop in the system.
@@ -71,24 +76,27 @@ refine_loop = LoopAgent(
     max_iterations=2,
 )
 
-# 5) Readability — final pass to hit the target grade level and tone.
-readability = LlmAgent(
-    name="Readability",
+final_verifier = LlmAgent(
+    name="FinalVerifier",
     model=MODEL,
     instruction=(
-        "Polish the final draft to a Flesch-Kincaid grade level of 8 or below while preserving every "
-        "fact. Do not introduce new clinical content."
+        "Perform a final check of {readability_draft} against {atoms} after refinement. "
+        "Return JSON with faithful, unsupported_claims, omissions, and reading_level_ok. "
+        "Do not rewrite the explanation."
     ),
-    output_key="final",
+    output_key="final_verdict",
 )
 
-# The deterministic DAG: Extractor -> Simplifier -> (Verifier <-> Refiner, bounded) -> Readability.
+# Verify after readability and again after the bounded refine loop's last possible rewrite.
 faithfulmed = SequentialAgent(
     name="FaithfulMed",
-    sub_agents=[extractor, simplifier, refine_loop, readability],
+    sub_agents=[extractor, simplifier, readability, refine_loop, final_verifier],
 )
 
 if __name__ == "__main__":
     print("FaithfulMed ADK pipeline assembled:")
-    print("  Extractor -> Simplifier -> [Verifier <-> Refiner x<=2] -> Readability")
+    print(
+        "  Extractor -> Simplifier -> Readability -> "
+        "[Verifier <-> Refiner x<=2] -> FinalVerifier"
+    )
     print("Run it with an ADK Runner + session (see the ADK quickstart) once GEMINI_API_KEY is set.")
