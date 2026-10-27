@@ -1,7 +1,8 @@
 # ── Google GCP-first stack ─────────────────────────────────────────────
 google-genai          # unified Gemini SDK (Google AI Studio + Vertex AI)
-google-adk            # Agent Development Kit — multi-agent orchestration
+google-adk>=2.0,<3.0 # Agent Development Kit — multi-agent orchestration
 litellm               # lets ADK call Gemma / external open models for the leaderboard
+opentelemetry-api     # spans for readability scoring and ADK traces
 
 # ── RAG / retrieval ────────────────────────────────────────────────────
 chromadb

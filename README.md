@@ -37,6 +37,65 @@
 * How to access the dataset(s)
 * How to run the notebook or scripts
 
+### Readability agent
+
+The Readability agent is a standalone Google ADK agent in `agents/readability/`.
+See the [Readability Agent README](agents/readability/README.md) for complete
+PowerShell setup, run, evaluation, and multi-agent integration instructions.
+Its output is measured independently of the model using Flesch-Kincaid grade level
+(the project's primary <= 8 target), Flesch Reading Ease, SMOG, Coleman-Liau,
+Automated Readability Index, Gunning Fog, Dale-Chall, sentence length, and a
+difficult-word ratio. The difficult-word ratio is a general vocabulary proxy, not
+a medical-jargon detector. These formulas are complementary signals, not
+interchangeable grade-level guarantees.
+
+Run its ADK development UI from the repository root:
+
+```powershell
+Remove-Item Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
+$env:GEMINI_API_KEY = $null
+$secureKey = Read-Host -AsSecureString "Gemini API key"
+$env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+adk web agents
+```
+
+Set the key in the same PowerShell session used to start ADK. The Google Gen AI
+SDK prefers `GOOGLE_API_KEY` if both it and `GEMINI_API_KEY` are set, so remove
+any stale `GOOGLE_API_KEY` first. Restart ADK after changing keys. If a key was
+shared in chat or logs, revoke it in AI Studio and use a replacement.
+
+The evaluator can score the checked-in MTSamples baseline or another CSV with a
+text column:
+
+```powershell
+python -m agents.readability.evaluate data/mtsamples_baseline_outputs.csv
+python -m unittest discover -s tests
+```
+
+On the currently checked-in 50-output baseline, this evaluator reports 72% at or
+below grade 8 by Flesch-Kincaid (mean grade 7.65). Mean SMOG is 10.48; the other
+readability measures are included in the evaluator output. These are baseline
+measurements, not evidence that the Readability agent has improved the outputs.
+
+`assess_candidate` checks caller-supplied protected clinical facts after generation.
+If any are missing, it returns the original draft and marks the result
+`preservation_failed`; it does not silently accept the rewrite. Use short,
+specific protected facts such as medication names, doses, lab values, dates, and
+instructions. The final Verifier should still validate the accepted readability
+output.
+
+The Readability agent accepts optional `glossary_context` from the upstream
+Simplifier/RAG step; it does not create a second retrieval index. To export ADK
+spans and structured telemetry to Google Cloud Trace and Cloud Logging, set
+`FAITHFULMED_CLOUD_OBSERVABILITY=true`, configure Google Cloud Application Default
+Credentials with permissions for the selected project, then start `adk web agents`.
+Telemetry does not enable prompt-content capture. Do not enable content capture for
+clinical text unless the data handling policy explicitly permits it.
+
+References: [ADK LLM agents](https://adk.dev/agents/llm-agents/),
+[ADK observability](https://adk.dev/observability/), and
+[ADK traces](https://adk.dev/observability/traces/).
+
 ---
 
 ## 🏗️ **Project Overview**
