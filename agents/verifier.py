@@ -1,12 +1,13 @@
 """Verifier agent for checking simplified medical text."""
 
+import os
 from typing import List, Literal, Optional
 
 from google.adk.agents import LlmAgent
 from pydantic import BaseModel, Field, field_validator
 
 
-MODEL = "gemini-3-flash-preview"
+MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
 
 
 class ClinicalAtom(BaseModel):
@@ -108,6 +109,14 @@ Treat original_text as the source of truth. clinical_atoms can help find
 omissions, but verify them against original_text before using them. Do not
 assume the extracted atoms are complete or correct. General definitions are
 acceptable only when they do not introduce unsupported clinical claims.
+
+Preserve evidence status and attribution. A patient-reported or patient-denied
+finding is not automatically an established clinical fact: for example,
+"no fever is reported" must not become "the patient does not have a fever"
+unless the source establishes that stronger claim. Do not add a doctor or
+clinician attribution, a common-cold equivalence, or other explanatory diagnosis
+unless supported by the source. Treat changing "suspected" to "confirmed" as a
+high-severity faithfulness failure.
 
 For each issue, give a short description and severity (low, medium, high).
 Include a brief source quote when relevant, and the problematic simplified

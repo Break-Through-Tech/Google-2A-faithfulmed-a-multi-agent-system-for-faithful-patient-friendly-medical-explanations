@@ -84,8 +84,8 @@ specific protected facts such as medication names, doses, lab values, dates, and
 instructions. The final Verifier should still validate the accepted readability
 output.
 
-The Readability agent accepts optional `glossary_context` from the upstream
-Simplifier/RAG step; it does not create a second retrieval index. To export ADK
+The Readability agent accepts optional `retrieved_context` from the upstream
+Simplifier/RAG step; it does not create or query a retrieval index. To export ADK
 spans and structured telemetry to Google Cloud Trace and Cloud Logging, set
 `FAITHFULMED_CLOUD_OBSERVABILITY=true`, configure Google Cloud Application Default
 Credentials with permissions for the selected project, then start `adk web agents`.
@@ -95,6 +95,70 @@ clinical text unless the data handling policy explicitly permits it.
 References: [ADK LLM agents](https://adk.dev/agents/llm-agents/),
 [ADK observability](https://adk.dev/observability/), and
 [ADK traces](https://adk.dev/observability/traces/).
+
+### Shared agent contract and Simplifier
+
+The shared `PipelineCase` in `agents/contracts.py` adapts Extractor notebook
+output to the current Verifier and Refiner input formats. The ADK Simplifier is
+in `agents/simplifier/`; its output key is `draft`. See the
+[Simplifier README](agents/simplifier/README.md) for the contract and handoff
+sequence. All agent modules read `FAITHFULMED_MODEL` so an initial multi-agent
+test can use one configured model.
+
+The repository includes ChromaDB as a dependency, but does not yet include a
+working vector-index ingestion or query implementation. Retrieval is optional
+for the first end-to-end test: run with an empty `retrieved_context`, then add
+RAG when the source corpus, indexing process, and retrieval evaluation are ready.
+Run the synthetic multi-agent handoff from the
+[Simplifier README](agents/simplifier/README.md) with
+`python -m agents.run_pipeline`; it requires a valid Gemini API key and makes
+live model calls.
+
+### Local multi-agent review UI
+
+Run the Gradio UI backed by the same ADK agent runner:
+
+```powershell
+Remove-Item Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
+$env:GEMINI_API_KEY = $null
+$secureKey = Read-Host -AsSecureString "Gemini API key"
+$env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+$env:FAITHFULMED_MODEL = "gemini-3.5-flash-lite"
+.\.venv\Scripts\python.exe -m agents.ui
+```
+
+Open the local address printed by Gradio (normally `http://127.0.0.1:7860`).
+The UI shows Simplifier and Readability outputs, initial/final Verifier
+feedback, Refiner count, deterministic safety checks, and final review status.
+The optional dataset picker loads up to eight of the longest local MTSamples
+transcriptions and eight detailed MedAESQA expert answers from `data/`. Loading
+only fills the source field; submitting the pipeline sends that text to the
+configured model. MedAESQA answers are QA responses, not clinical notes, and
+should be treated as supplementary test material rather than extractor gold.
+MTSamples is de-identified but should still be handled carefully.
+Use synthetic or approved de-identified notes only. The output is always marked
+**HUMAN REVIEW REQUIRED**; a Verifier pass is not proof of clinical correctness.
+The Refiner runs only when the Verifier reports issues. Deterministic findings
+remain visible and require human review, but do not alone trigger retries; this
+avoids asking the Refiner to restore every number in a detailed source note when
+the Verifier considers the candidate acceptable. The Readability output and
+Verifier candidate are expected to match unless the Refiner demo checkbox is
+used; the Refiner may also make minimal changes or leave text unchanged.
+The optional live adversarial suite uses seven Gemini calls. Keep the UI bound to
+localhost and stop it with Ctrl+C when finished.
+
+Run offline checks, including tests for reporting-status changes, certainty,
+negation, doses, timing, omissions, additions, and bounded handoffs:
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest tests.test_acceptance tests.test_pipeline_handoffs tests.test_ui
+```
+
+To evaluate the live Verifier on the synthetic adversarial set:
+
+```powershell
+.\.venv\Scripts\python.exe -m agents.evaluate_verifier_cases
+```
 
 ---
 

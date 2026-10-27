@@ -1,6 +1,8 @@
+import os
+
 from google.adk.agents import LlmAgent
 
-MODEL = "gemini-3.8-flash"
+MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
 
 REFINER_INSTRUCTION = """
 Original medical text:

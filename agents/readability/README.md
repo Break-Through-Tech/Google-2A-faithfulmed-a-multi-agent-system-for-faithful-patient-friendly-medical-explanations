@@ -6,7 +6,7 @@ Flesch-Kincaid grade level of 8 or below while preserving the clinical meaning.
 
 The agent does not build or call the retrieval index itself. In the eventual
 pipeline, the Simplifier can pass relevant retrieved definitions as
-`glossary_context`.
+`retrieved_context`.
 
 If ADK Web is already running while you change Python files, stop and restart
 the server so it reloads the agent package.
@@ -170,7 +170,7 @@ The agent's ADK `output_key` is `readability_draft`.
 | `target_grade` | Input | Optional numeric reading-level target; defaults to 8 in the agent instructions. |
 | `atoms` | Input | Optional structured clinical facts from the Extractor; the agent is instructed to preserve them. |
 | `protected_facts` | Input | Optional exact phrases for high-risk details that the deterministic check should preserve. |
-| `glossary_context` | Input | Optional definitions retrieved upstream; use for wording, not new clinical claims. |
+| `retrieved_context` | Input | Optional sourced definitions retrieved upstream; use for wording, not patient-specific claims. |
 | `readability_draft` | Output | The agent's revised text. |
 
 The future pipeline should:
@@ -190,6 +190,18 @@ the Readability agent before the Verifier/Refiner loop and a final verification
 step. The deterministic `assess_candidate` check is not automatically called by
 the scaffold yet; wire it into the application before treating candidate output
 as accepted.
+
+The current terminal pipeline and local UI additionally call
+`agents.acceptance.assess_acceptance`, which checks caller-supplied critical
+phrases, numeric/timing details, negation, uncertainty, and reported status.
+Those conservative checks can flag safe paraphrases and cannot prove semantic
+faithfulness. The UI and pipeline always return `human_review_required`, even
+when the LLM Verifier passes.
+
+For the full local multi-agent UI, including stage outputs, verifier findings,
+Refiner count, deterministic checks, and review status, run
+`.\.venv\Scripts\python.exe -m agents.ui` from the repository root. See the
+project README's **Local multi-agent review UI** section for setup.
 
 ## Optional Cloud Trace and Cloud Logging
 

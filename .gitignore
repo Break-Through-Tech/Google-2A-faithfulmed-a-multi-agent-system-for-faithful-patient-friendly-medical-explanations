@@ -8,6 +8,7 @@ __pycache__/
 .venv/
 venv/
 env/
+agents/readability/.adk/
 
 # Secrets — never commit API keys (Gemini, Groq, HF, etc.)
 .env

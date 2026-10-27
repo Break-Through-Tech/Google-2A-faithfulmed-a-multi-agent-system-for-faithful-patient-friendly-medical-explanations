@@ -27,11 +27,13 @@ root_agent = LlmAgent(
         "Do not change or omit diagnoses, medication names, doses, frequencies, dates, "
         "measurements, lab values, negation, uncertainty, warnings, or follow-up instructions. "
         "Do not add advice, diagnoses, explanations, or facts that are not in the draft or "
-        "the supplied clinical facts. Preserve the original meaning and uncertainty.\n\n"
-        "If {glossary_context?} is supplied by the upstream retrieval step, use it only to "
-        "choose a plain-language equivalent for a term. Do not add new medical information "
-        "from the glossary. Return only the revised patient-facing text, without a preamble, "
-        "grade-level claim, or evaluation notes."
+        "the supplied clinical facts. Preserve the difference between reported findings and "
+        "established facts; do not add a doctor attribution or diagnostic equivalence not "
+        "supported by the input. Preserve the original meaning and uncertainty.\n\n"
+        "If {retrieved_context?} is supplied by the upstream retrieval step, use it only "
+        "to choose a plain-language equivalent for a term. Do not add new medical information "
+        "from retrieved context. Return only the revised patient-facing text, without a "
+        "preamble, grade-level claim, or evaluation notes."
     ),
     output_key="readability_draft",
 )
