@@ -20,6 +20,7 @@ if not (PROJECT_ROOT / "data").is_dir():
 DATA_PATH = PROJECT_ROOT / "data" / "mtsamples_baseline_outputs.csv"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "extractor_outputs.jsonl"
 MODEL = "gemini-3.5-flash"
+SOURCE_RECORD_NUMBER = 1
 
 ALLOWED_TYPES = {
     "diagnosis", "diagnosis_reasoning", "symptom", "risk", "medical_history",
@@ -226,6 +227,17 @@ def load_records(path: Path = DATA_PATH) -> pd.DataFrame:
     records = records[["sample_name", "transcription"]].dropna()
     return records[records["transcription"].str.strip().ne("")].reset_index(drop=True)
 
+def select_source_record(
+    records: pd.DataFrame,
+    record_number: int = SOURCE_RECORD_NUMBER,
+) -> pd.Series:
+    if record_number < 1 or record_number > len(records):
+        raise ValueError(
+            f"SOURCE_RECORD_NUMBER must be between 1 and {len(records)}; "
+            f"got {record_number}."
+        )
+    return records.iloc[record_number - 1]
+
 def make_client():
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
@@ -237,87 +249,68 @@ def make_client():
 def extract_atoms(
     source_text: str,
     client: Any | None = None,
-    max_retries: int = 2,
 ) -> dict[str, Any]:
     if client is None:
         client = make_client()
-    if max_retries < 0:
-        raise ValueError("max_retries cannot be negative.")
 
     input_json = "\n\nINPUT JSON:\n" + json.dumps({"clinical_note": source_text})
     prompt = EXTRACTOR_INSTRUCTIONS + input_json
-    last_error = None
-    for attempt in range(max_retries + 1):
-        try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=RESPONSE_SCHEMA,
-                    automatic_function_calling=types.AutomaticFunctionCallingConfig(
-                        disable=True
-                    ),
-                ),
-            )
-            if not response.text:
-                raise ValueError("Gemini returned an empty response.")
-            model_output = json.loads(response.text)
-            return validate_output(model_output, source_text)
-        except (json.JSONDecodeError, ValueError) as error:
-            last_error = error
-            if attempt == max_retries:
-                break
-            prompt = (
-                EXTRACTOR_INSTRUCTIONS
-                + "\n\nCORRECTION: Return the required JSON object. "
-                "Use only source_quote values copied from the clinical note."
-                + input_json
-            )
-    raise RuntimeError(
-        f"Extractor response remained invalid after {max_retries + 1} attempts: "
-        f"{last_error}"
-    ) from last_error
+    response = client.models.generate_content(
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=RESPONSE_SCHEMA,
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(
+                disable=True
+            ),
+        ),
+    )
+    if not response.text:
+        raise ValueError("Gemini returned an empty response.")
+    try:
+        model_output = json.loads(response.text)
+    except json.JSONDecodeError as error:
+        raise ValueError("Gemini returned invalid JSON.") from error
+    return validate_output(model_output, source_text)
 
 def run_extraction(
-    records_to_process: pd.DataFrame,
+    records: pd.DataFrame,
+    record_number: int = SOURCE_RECORD_NUMBER,
     output_path: Path = OUTPUT_PATH,
-    limit: int = 2,
 ) -> None:
-    if limit < 1:
-        raise ValueError("limit must be at least 1.")
+    selected = select_source_record(records, record_number)
     client = make_client()
-    selected = records_to_process.head(limit)
+    try:
+        extraction = extract_atoms(selected["transcription"], client=client)
+        result = {
+            "source_record_number": record_number,
+            "sample_name": selected["sample_name"],
+            "status": "success",
+            **extraction,
+        }
+    except Exception as error:
+        result = {
+            "source_record_number": record_number,
+            "sample_name": selected["sample_name"],
+            "status": "failed",
+            "atoms": [],
+            "not_found_types": sorted(ALLOWED_TYPES),
+            "rejected_atoms": [],
+            "warnings": [],
+            "error": {
+                "type": type(error).__name__,
+                "annotation": str(error),
+            },
+        }
     with output_path.open("w", encoding="utf-8") as output_file:
-        for row in selected.itertuples(index=False):
-            try:
-                extraction = extract_atoms(row.transcription, client=client)
-                result = {
-                    "sample_name": row.sample_name,
-                    "status": "success",
-                    **extraction,
-                }
-            except Exception as error:
-                result = {
-                    "sample_name": row.sample_name,
-                    "status": "failed",
-                    "atoms": [],
-                    "not_found_types": sorted(ALLOWED_TYPES),
-                    "rejected_atoms": [],
-                    "warnings": [],
-                    "error": {
-                        "type": type(error).__name__,
-                        "annotation": str(error),
-                    },
-                }
-            output_file.write(json.dumps(result) + "\n")
-    print(f"Saved {len(selected)} extraction results to {output_path}")
+        output_file.write(json.dumps(result) + "\n")
+    print(
+        f"Saved extraction result for source record {record_number} "
+        f"to {output_path}"
+    )
 
 
 if __name__ == "__main__":
     records = load_records()
-    sample_source = records.iloc[1]["transcription"]
-    sample_output = extract_atoms(sample_source)
-    print(json.dumps(sample_output, indent=2))
-    
-    # run_extraction(records)
+    run_extraction(records)
