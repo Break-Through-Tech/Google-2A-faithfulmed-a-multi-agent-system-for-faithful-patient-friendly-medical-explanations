@@ -1,14 +1,15 @@
-# FaithfulMed Simplifier Agent
+# FaithfulMed Simplifier
 
-This is a minimal standalone Google ADK Simplifier. It produces the `draft`
-state value from `source_text`, `atoms`, and `target_grade`. Optional
-`retrieved_context` contains sourced general definitions; it is not required to
-run the agent.
+The Simplifier creates a patient-friendly draft from source text and extracted
+clinical atoms. It is called directly through the project's shared Gemini model
+runner. Optional `retrieved_context` may provide general definitions for
+terminology; it is never evidence about the patient.
 
 ## Shared input contract
 
-Build a validated `PipelineCase` from the source note and Extractor notebook
-output:
+`PipelineCase` validates the Extractor's `atoms` list and verifies that each
+`source_quote` appears in the source note. It assigns stable atom IDs and adapts
+the case for downstream agents.
 
 ```python
 from agents.contracts import PipelineCase
@@ -18,80 +19,45 @@ case = PipelineCase.from_extractor_output(
     extractor_output=extractor_result,
     target_grade=8,
 )
-adk_state = case.to_adk_state()
+state = case.to_state()
 ```
 
-The canonical atom fields are `id`, `text`, `type`, and `source_quote`.
-`from_extractor_output` validates the Extractor's `atoms` list and verifies
-that each exact source quote occurs in the source note. It assigns stable
-`atom-001`, `atom-002`, ... IDs for the case. The adapter
-`case.verifier_atoms()` maps atoms to the existing Verifier fields
-(`id`, `concept`, and `importance`). `case.refiner_state(candidate_text,
-verifier_feedback)` maps source and candidate text to the Refiner's existing
-`original_text`, `simplified_text`, and `verifier_feedback` inputs.
+The interactive sequence is Extractor → Simplifier → Readability → Verifier.
+When the Verifier finds issues, Refiner produces a candidate that is sent back
+to Verifier. The Gradio interface lets you run each agent separately and see
+the exact input/output at every handoff.
 
-The expected first-pass handoff is:
+## Run the UI and synthetic pipeline
 
-```text
-Extractor result -> PipelineCase -> Simplifier (`draft`)
-                 -> Readability (`readability_draft`)
-                 -> Verifier (`verifier_feedback`)
-                 -> Refiner (`simplified_text`) -> Verifier
-```
-
-The pipeline should pass the Readability result as the Verifier's
-`simplified_text` and the Refiner's candidate. Re-run the Verifier after each
-refinement. `agents.run_pipeline` now implements those handoffs with individual
-in-memory ADK runners and a configurable bounded retry limit.
-
-## Run the synthetic end-to-end handoff
-
-From the repository root, set a valid Gemini API key in PowerShell, then run:
+From the repository root, install requirements and securely set `GEMINI_API_KEY`
+in PowerShell, then launch either the step-by-step UI or the command-line
+Simplifier → Readability → Verifier pipeline:
 
 ```powershell
-Remove-Item Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
-$env:GEMINI_API_KEY = $null
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 $secureKey = Read-Host -AsSecureString "Gemini API key"
 $env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
-.\.venv\Scripts\python.exe -m agents.run_pipeline
+.\.venv\Scripts\python.exe -m agents.ui
 ```
 
-The script uses a synthetic cough note and Extractor-shaped sample output. It
-runs Simplifier, Readability, Verifier, and up to two Refiner/re-verification
-rounds, then prints a JSON result with each candidate and the final verifier
-status. It prints a progress line before and after each Gemini call; a long
-pause after a "Calling Gemini" line means that agent is waiting on the API.
-Use Ctrl+C to cancel if it does not return. Use `--max-refinements 0` to test
-the no-refinement path. This makes live Gemini calls; 503/429 responses may be
-temporary and incur API usage.
-
-To deliberately test whether Verifier catches a changed certainty and whether
-Refiner corrects it, run:
-
 ```powershell
+.\.venv\Scripts\python.exe -m agents.run_pipeline
 .\.venv\Scripts\python.exe -m agents.run_pipeline --exercise-refiner
 ```
 
-This appends the false claim "The suspected viral infection is confirmed." to
-the Readability output before verification. Review `initial_candidate`,
-`initial_verifier_feedback`, `refiner_exercised`, `final_text`, and the final
-`verifier_feedback` in the JSON output. A successful demonstration means the
-initial verifier flags the claim, Refiner is called, and final verification is
-run again. If the verifier passes the injected false claim, the demonstration
-has exposed a verifier miss; it is not a successful faithfulness result.
-
-The runner module supports an injected async agent executor so the state
-handoffs and retry cap can be tested offline:
+The command-line workflow uses a synthetic cough note and runs up to two
+Verifier/Refiner rounds. `--exercise-refiner` adds a deliberately unsupported
+certainty claim to test the verification path. It makes live Gemini calls and
+may use API quota. The tests inject fake executors and run without a key:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_handoffs
+.\.venv\Scripts\python.exe -m unittest tests.test_pipeline_handoffs tests.test_agent_workflow -v
 ```
 
-## Retrieval
+## Optional MedlinePlus retrieval
 
-No vector index is needed to test the first multi-agent handoffs. Leave
-`retrieved_context` empty and verify source-grounded rewriting, schema
-validation, and the Verifier/Refiner cycle first. Add RAG when the team has
-approved source documents, a repeatable indexing process, and tests for source
-metadata and retrieval quality. Retrieved definitions may help explain terms,
-but the source note remains authoritative for patient-specific details.
+The local MedlinePlus index is not committed. The retrieval helper and
+Simplifier implementation can use the index built by
+`agents/medlineplus_rag_index.ipynb`. Retrieved definitions may help choose
+plain-language wording but must not add patient-specific information or advice.
+Use synthetic or approved de-identified notes only.

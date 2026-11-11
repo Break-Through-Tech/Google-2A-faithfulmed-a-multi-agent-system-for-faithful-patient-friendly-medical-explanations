@@ -8,16 +8,15 @@ from typing import Any, List, Optional, Tuple
 import chromadb
 from dotenv import load_dotenv
 from google import genai
-from google.adk.agents import LlmAgent
-from google.adk.agents.callback_context import CallbackContext
-from google.adk.agents.readonly_context import ReadonlyContext
 from google.genai import types
 from pydantic import BaseModel, Field
  
 try:
-    from .verifier import MODEL, make_verifier_input
+    from .model_runner import MODEL
+    from .verifier import make_verifier_input
 except ImportError:  # running as a plain script from inside agents/
-    from verifier import MODEL, make_verifier_input
+    from model_runner import MODEL
+    from verifier import make_verifier_input
  
 REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(REPO_ROOT / ".env")
@@ -37,8 +36,6 @@ MAX_DISTANCE: Optional[float] = None
  
 
 SOURCE_FILTER: Optional[str] = None
- 
-ATOMS_KEY = "clinical_atoms"
  
 TRANSIENT = ("429", "500", "503", "RESOURCE_EXHAUSTED", "INTERNAL", "UNAVAILABLE")
  
@@ -107,14 +104,28 @@ def _embed_queries(queries: List[str]) -> List[List[float]]:
     response = _with_retry(
         lambda: _get_client().models.embed_content(
             model=EMBED_MODEL,
-            contents=queries,
+            contents=[
+                types.Content(parts=[types.Part(text=query)])
+                for query in queries
+            ],
             config=types.EmbedContentConfig(
                 task_type="RETRIEVAL_QUERY", output_dimensionality=EMBED_DIMS
             ),
         ),
         label="embedding",
     )
-    return [e.values for e in response.embeddings]
+    if response is None:
+        raise RuntimeError("Gemini returned no embedding response.")
+    if response.embeddings is None:
+        raise RuntimeError("Gemini returned no embeddings for the retrieval queries.")
+    embeddings = []
+    for embedding in response.embeddings:
+        if embedding.values is None:
+            raise RuntimeError("Gemini returned an embedding without vector values.")
+        embeddings.append(embedding.values)
+    if len(embeddings) != len(queries):
+        raise RuntimeError("Gemini returned an unexpected number of retrieval embeddings.")
+    return embeddings
  
  
 def retrieve_context(
@@ -134,19 +145,30 @@ def retrieve_context(
     if SOURCE_FILTER:
         kwargs["where"] = {"source_type": SOURCE_FILTER}
     res = _get_collection().query(**kwargs)
+    ids_by_query = res["ids"]
+    documents_by_query = res["documents"]
+    metadatas_by_query = res["metadatas"]
+    distances_by_query = res["distances"]
+    if (
+        ids_by_query is None
+        or documents_by_query is None
+        or metadatas_by_query is None
+        or distances_by_query is None
+    ):
+        raise RuntimeError("MedlinePlus returned incomplete query results.")
  
     chunks: List[dict] = []
     seen = set()
     for rank in range(results_per_query):
         for qi in range(len(queries)):
-            ids = res["ids"][qi]
+            ids = ids_by_query[qi]
             if rank >= len(ids) or ids[rank] in seen:
                 continue
-            dist = res["distances"][qi][rank]
+            dist = distances_by_query[qi][rank]
             if max_distance is not None and dist > max_distance:
                 continue
             seen.add(ids[rank])
-            meta = res["metadatas"][qi][rank] or {}
+            meta = metadatas_by_query[qi][rank] or {}
             chunks.append(
                 {
                     "source_id": f"S{len(chunks) + 1}",
@@ -154,7 +176,7 @@ def retrieve_context(
                     "title": meta.get("title", ""),
                     "source_type": meta.get("source_type", ""),
                     "url": meta.get("url", ""),
-                    "text": res["documents"][qi][rank],
+                    "text": documents_by_query[qi][rank],
                     "distance": dist,
                 }
             )
@@ -341,7 +363,12 @@ def simplify(
         ),
         label="generate_content",
     )
-    out = SimplifierOutput.model_validate_json(response.text)
+    if response is None:
+        raise RuntimeError("Simplifier received no Gemini response.")
+    response_text = response.text
+    if not isinstance(response_text, str) or not response_text.strip():
+        raise RuntimeError("Simplifier received an empty Gemini response.")
+    out = SimplifierOutput.model_validate_json(response_text)
     definitions, sources = verify_definitions(out.definitions_used, chunks)
     return {
         "simplified_text": out.simplified_text,
@@ -358,76 +385,6 @@ def simplify(
  
  
 
-def _user_text(ctx: CallbackContext) -> str:
-    content = getattr(ctx, "user_content", None)
-    if content and content.parts:
-        return "\n".join(p.text for p in content.parts if getattr(p, "text", None)).strip()
-    return ""
- 
- 
-def retrieve_for_simplifier(callback_context: CallbackContext) -> Optional[types.Content]:
-    """before_agent_callback: deterministic retrieval, outside the model."""
-    state = callback_context.state
-    original_text = state.get("original_text") or _user_text(callback_context)
-    if not original_text:
-        raise ValueError("Simplifier needs original_text in state or in the user message.")
-    state["original_text"] = original_text
- 
-    atoms = _coerce_atoms(state.get(ATOMS_KEY))
-    if state.get("use_rag", True):
-        state["retrieved_chunks"] = retrieve_context(build_queries(original_text, atoms))
-    else:
-        state["retrieved_chunks"] = []
-    return None
- 
- 
-def simplifier_instruction(ctx: ReadonlyContext) -> str:
-    """Instruction provider; building the prompt ourselves means braces in clinical text
-    can never break ADK's state templating."""
-    s = ctx.state
-    return build_instruction(
-        original_text=s.get("original_text", ""),
-        atoms=_coerce_atoms(s.get(ATOMS_KEY)),
-        chunks=s.get("retrieved_chunks") or [],
-        target_grade_level=_grade(s.get("target_grade_level")),
-    )
- 
- 
-def prepare_verifier_input(callback_context: CallbackContext) -> Optional[types.Content]:
-    """after_agent_callback: verify definitions and build the Verifier's input JSON."""
-    state = callback_context.state
-    out = state.get("simplified_output")
-    if isinstance(out, str):
-        out = json.loads(out)
-    if not out or not out.get("simplified_text"):
-        raise RuntimeError("Simplifier produced no simplified_text.")
- 
-    defs = [TermSource(**d) for d in out.get("definitions_used", [])]
-    state["definitions_verified"], state["sources_used"] = verify_definitions(
-        defs, state.get("retrieved_chunks") or []
-    )
-    state["verifier_input"] = make_verifier_input(
-        original_text=state.get("original_text", ""),
-        simplified_text=out["simplified_text"],
-        clinical_atoms=_coerce_atoms(state.get(ATOMS_KEY)),
-        target_grade_level=_grade(state.get("target_grade_level")),
-    )
-    return None
- 
- 
-simplifier_agent = LlmAgent(
-    name="simplifier_agent",
-    model=MODEL,
-    description="Rewrites clinical text in plain language, grounded in MedlinePlus.",
-    instruction=simplifier_instruction,
-    generate_content_config=types.GenerateContentConfig(temperature=TEMPERATURE),
-    output_schema=SimplifierOutput,
-    output_key="simplified_output",
-    before_agent_callback=retrieve_for_simplifier,
-    after_agent_callback=prepare_verifier_input,
-)
- 
- 
 if __name__ == "__main__":
     demo_note = (
         "The patient reports a dry cough for three days. No fever or shortness of breath "

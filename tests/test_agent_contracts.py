@@ -1,7 +1,7 @@
 import unittest
 
 from agents.contracts import PipelineCase
-from agents.verifier import VerifierInput
+from agents.verifier import VerifierInput, make_verifier_input
 
 
 class PipelineCaseTests(unittest.TestCase):
@@ -23,14 +23,14 @@ class PipelineCaseTests(unittest.TestCase):
             "not_found_types": [],
         }
 
-    def test_builds_canonical_case_and_adk_state(self):
+    def test_builds_canonical_case_and_json_state(self):
         case = PipelineCase.from_extractor_output(
             self.source_text,
             self.extractor_output,
         )
 
         self.assertEqual(case.atoms[0].id, "atom-001")
-        self.assertEqual(case.to_adk_state()["target_grade"], 8)
+        self.assertEqual(case.to_state()["target_grade"], 8)
         self.assertEqual(case.verifier_atoms()[0]["concept"], "Patient reports cough")
 
     def test_rejects_source_quote_not_in_source(self):
@@ -59,11 +59,12 @@ class PipelineCaseTests(unittest.TestCase):
             self.extractor_output,
         )
 
-        verifier_input = VerifierInput(
+        verifier_input_json = make_verifier_input(
             original_text=case.source_text,
             simplified_text="The patient reports a cough. No fever is reported.",
             clinical_atoms=case.verifier_atoms(),
         )
+        verifier_input = VerifierInput.model_validate_json(verifier_input_json)
 
         self.assertEqual(verifier_input.clinical_atoms[0].concept, "Patient reports cough")
 

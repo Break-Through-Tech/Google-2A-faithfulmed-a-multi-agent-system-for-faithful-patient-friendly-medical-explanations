@@ -1,24 +1,19 @@
-"""Local Gradio interface for the multi-agent FaithfulMed ADK prototype."""
+"""Local Gradio interface for stepping through agents and inspecting handoffs."""
 
 import csv
 import json
-import os
 from pathlib import Path
 from typing import Mapping
 
 import gradio as gr
 
 from agents.contracts import PipelineCase
-from agents.run_pipeline import (
-    MAX_REFINEMENTS,
-    SYNTHETIC_SOURCE,
-    run_pipeline,
-)
+from agents.run_pipeline import SYNTHETIC_SOURCE
+from agents.step_runner import STAGES, run_agent_stage
 
 
 DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 DATASET_LIMIT = 8
-
 DEFAULT_PROTECTED_FACTS = "\n".join(
     [
         "three days",
@@ -111,7 +106,7 @@ def build_case_from_ui(
     protected_facts_text: str,
     target_grade: int,
 ) -> PipelineCase:
-    """Build the shared case from user-entered source and optional exact facts."""
+    """Build a shared case from user-entered source and optional exact facts."""
     facts = [
         line.strip()
         for line in protected_facts_text.splitlines()
@@ -125,7 +120,8 @@ def build_case_from_ui(
                 "source_quote": fact,
             }
             for fact in facts
-        ]
+        ],
+        "not_found_types": [],
     }
     return PipelineCase.from_extractor_output(
         source_text=source_text,
@@ -135,55 +131,54 @@ def build_case_from_ui(
     )
 
 
-async def run_ui_pipeline(
+async def run_ui_stage(
     source_text: str,
     protected_facts_text: str,
     target_grade: int,
-    max_refinements: int,
-    exercise_refiner: bool,
+    use_retrieval: bool,
+    state: dict | None,
+    stage: str,
 ):
-    case = build_case_from_ui(source_text, protected_facts_text, target_grade)
-    result = await run_pipeline(
-        case,
-        max_refinements=max_refinements,
-        exercise_refiner=exercise_refiner,
+    protected_facts = [
+        line.strip()
+        for line in protected_facts_text.splitlines()
+        if line.strip()
+    ]
+    updated_state, result = await run_agent_stage(
+        stage,
+        source_text,
+        protected_facts,
+        int(target_grade),
+        state,
+        use_retrieval=use_retrieval,
     )
-
-    acceptance = result["acceptance"]
+    next_stage = updated_state.get("next_stage")
     status = (
-        "## HUMAN REVIEW REQUIRED\n"
-        f"- Automated verifier and deterministic checks: "
-        f"{'passed' if result['automated_checks_passed'] else 'issues found'}\n"
-        f"- Refiner runs: {result['refinements']} / {result['max_refinements']}\n"
-        "- Stage path: Simplifier → Readability → Verifier"
-        + (
-            " → Refiner → Verifier" * result["refinements"]
-            if result["refinements"]
-            else ""
-        )
-        + "\n"
-        "- Deterministic findings require review but do not by themselves trigger "
-        "Refiner retries.\n"
-        "- This prototype never automatically approves clinical text."
+        f"Completed **{stage}**. Next in sequence: **{next_stage}**."
+        if next_stage
+        else f"Completed **{stage}**. The sequence is complete; review every output."
     )
-    return (
-        status,
-        result["draft"],
-        result["readability_draft"],
-        result["initial_candidate"],
-        json.dumps(result["initial_verifier_feedback"], indent=2),
-        json.dumps(result["verifier_feedback"], indent=2),
-        result["refinements"],
-        result["final_text"],
-        json.dumps(acceptance, indent=2),
-        json.dumps(result, indent=2),
+    return updated_state, status, result, updated_state["history"]
+
+
+async def run_next_ui_stage(
+    source_text: str,
+    protected_facts_text: str,
+    target_grade: int,
+    use_retrieval: bool,
+    state: dict | None,
+):
+    next_stage = (state or {}).get("next_stage", "Extractor")
+    if next_stage is None:
+        raise ValueError("No next agent is queued. Review results or reset the run.")
+    return await run_ui_stage(
+        source_text,
+        protected_facts_text,
+        target_grade,
+        use_retrieval,
+        state,
+        next_stage,
     )
-
-
-async def run_adversarial_ui():
-    from agents.evaluate_verifier_cases import evaluate_cases
-
-    return await evaluate_cases()
 
 
 def create_demo() -> gr.Blocks:
@@ -196,45 +191,43 @@ def create_demo() -> gr.Blocks:
         if dataset_examples
         else "No supported local dataset files found. You can still enter synthetic text."
     )
-    with gr.Blocks(title="FaithfulMed Multi-Agent Review") as demo:
+
+    with gr.Blocks(title="FaithfulMed Agent Workbench") as demo:
         gr.Markdown(
-            "# FaithfulMed Multi-Agent Prototype\n"
-            "Run the Simplifier → Readability → Verifier → bounded Refiner flow. "
-            f"Model: `{os.getenv('FAITHFULMED_MODEL', 'gemini-flash-latest')}`. "
-            "Use synthetic or approved de-identified notes only. Output always "
-            "requires human review."
+            "# FaithfulMed Agent Workbench\n"
+            "Run one agent at a time, inspect its exact input and output, then pass "
+            "the result to the next agent. The default order is "
+            "**Extractor → Simplifier → Readability → Verifier → Refiner**; after "
+            "Refiner, the candidate returns to Verifier. Outputs require human review."
         )
         gr.Markdown(
-            "Dataset records are read from this machine. Loading a record only fills "
-            "the source box; clicking Run sends that text to the configured model. "
-            "MedAESQA expert answers are detailed QA answers, not clinical notes."
+            "Use synthetic or approved de-identified notes only. Clicking an agent "
+            "sends its input to the configured Gemini model. Dataset records are "
+            "loaded locally and are not sent until an agent is run."
         )
+        run_state = gr.State({})
         with gr.Row():
             with gr.Column(scale=2):
                 dataset = gr.Dropdown(
                     choices=list(dataset_examples),
                     value=next(iter(dataset_examples), None),
-                    label="Optional local long-form dataset example",
+                    label="Optional local dataset example",
                     interactive=bool(dataset_examples),
                 )
-                dataset_info = gr.Markdown(dataset_status)
+                gr.Markdown(dataset_status)
                 load_dataset_button = gr.Button(
-                    "Load selected example into source note",
+                    "Load selected example",
                     interactive=bool(dataset_examples),
                 )
                 source = gr.Textbox(
                     label="Source note",
                     value=SYNTHETIC_SOURCE,
-                    lines=7,
+                    lines=8,
                 )
                 protected = gr.Textbox(
                     label="Critical facts to require exactly (one per line)",
                     value=DEFAULT_PROTECTED_FACTS,
                     lines=6,
-                    info=(
-                        "Each phrase must occur in the source; a rewrite that changes "
-                        "it is flagged for human review."
-                    ),
                 )
                 target = gr.Slider(
                     minimum=1,
@@ -243,89 +236,61 @@ def create_demo() -> gr.Blocks:
                     step=1,
                     label="Target reading grade",
                 )
-                max_refinements = gr.Slider(
-                    minimum=0,
-                    maximum=MAX_REFINEMENTS,
-                    value=MAX_REFINEMENTS,
-                    step=1,
-                    label="Maximum Refiner calls",
-                )
-                exercise = gr.Checkbox(
-                    label="Inject false 'confirmed' claim to test Verifier/Refiner",
+                use_retrieval = gr.Checkbox(
+                    label="Use local MedlinePlus retrieval during Simplifier",
                     value=False,
                 )
-                run_button = gr.Button("Run multi-agent pipeline", variant="primary")
-                adversarial_button = gr.Button("Run live Verifier adversarial suite")
-                load_dataset_button.click(
-                    fn=lambda selection: load_selected_dataset_case(
-                        selection,
-                        dataset_examples,
-                    ),
-                    inputs=[dataset],
-                    outputs=[source, protected],
+                selected_stage = gr.Dropdown(
+                    choices=list(STAGES),
+                    value=STAGES[0],
+                    label="Agent to run",
                 )
+                with gr.Row():
+                    run_selected = gr.Button(
+                        "Run selected agent",
+                        variant="primary",
+                    )
+                    run_next = gr.Button("Run next in sequence")
+                    reset = gr.Button("Reset run")
             with gr.Column(scale=3):
-                status = gr.Markdown()
-                with gr.Tab("Stages"):
-                    draft = gr.Textbox(label="Simplifier draft", lines=5)
-                    readable = gr.Textbox(
-                        label="Readability output",
-                        lines=5,
-                    )
-                    injected = gr.Textbox(
-                        label="Candidate sent to Verifier (normally the Readability output)",
-                        lines=5,
-                    )
-                    final_text = gr.Textbox(
-                        label="Final candidate (after zero or more Refiner calls)",
-                        lines=6,
-                    )
-                with gr.Tab("Verifier and review"):
-                    initial_feedback = gr.Code(
-                        label="Initial Verifier feedback",
-                        language="json",
-                    )
-                    final_feedback = gr.Code(
-                        label="Final Verifier feedback",
-                        language="json",
-                    )
-                    refinement_count = gr.Number(label="Refiner calls", precision=0)
-                    acceptance = gr.Code(
-                        label="Deterministic checks and human-review status",
-                        language="json",
-                    )
-                with gr.Tab("Full run data"):
-                    full_result = gr.Code(label="Pipeline JSON", language="json")
-                with gr.Tab("Adversarial suite"):
-                    adversarial_result = gr.JSON(
-                        label="Live Verifier case results",
-                    )
+                status = gr.Markdown("Ready. Start with the Extractor.")
+                latest_result = gr.JSON(label="Latest agent input and output")
+                all_results = gr.JSON(label="All completed agent steps")
 
-        run_button.click(
-            fn=run_ui_pipeline,
-            inputs=[source, protected, target, max_refinements, exercise],
-            outputs=[
-                status,
-                draft,
-                readable,
-                injected,
-                initial_feedback,
-                final_feedback,
-                refinement_count,
-                final_text,
-                acceptance,
-                full_result,
-            ],
+        load_dataset_button.click(
+            fn=lambda selection: load_selected_dataset_case(
+                selection,
+                dataset_examples,
+            ),
+            inputs=[dataset],
+            outputs=[source, protected],
         )
-        adversarial_button.click(
-            fn=run_adversarial_ui,
+        run_selected.click(
+            fn=run_ui_stage,
+            inputs=[
+                source,
+                protected,
+                target,
+                use_retrieval,
+                run_state,
+                selected_stage,
+            ],
+            outputs=[run_state, status, latest_result, all_results],
+        )
+        run_next.click(
+            fn=run_next_ui_stage,
+            inputs=[source, protected, target, use_retrieval, run_state],
+            outputs=[run_state, status, latest_result, all_results],
+        )
+        reset.click(
+            fn=lambda: ({}, "Ready. Start with the Extractor.", None, []),
             inputs=[],
-            outputs=[adversarial_result],
+            outputs=[run_state, status, latest_result, all_results],
         )
         gr.Markdown(
-            "The live adversarial suite sends seven synthetic cases to the Verifier "
-            "and may consume API quota. Deterministic checks are conservative and "
-            "cannot prove semantic equivalence."
+            "A rerun starts that stage again and invalidates dependent outputs. "
+            "The Verifier can route to Refiner when it finds issues; after Refiner, "
+            "run Verifier again. The UI never automatically approves clinical text."
         )
     return demo
 

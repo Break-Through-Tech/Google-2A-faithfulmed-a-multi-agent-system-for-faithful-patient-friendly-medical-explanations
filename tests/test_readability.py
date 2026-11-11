@@ -1,6 +1,6 @@
-import os
 import unittest
 
+from agents.model_runner import MODEL
 from agents.readability.agent import root_agent
 from agents.readability.metrics import assess_candidate, measure_readability
 
@@ -77,15 +77,12 @@ class ReadabilityMetricsTests(unittest.TestCase):
 
 
 class ReadabilityAgentTests(unittest.TestCase):
-    def test_adk_agent_has_expected_contract(self):
+    def test_agent_has_expected_contract(self):
         self.assertEqual(root_agent.name, "readability_agent")
         self.assertEqual(root_agent.output_key, "readability_draft")
-        self.assertEqual(
-            root_agent.model,
-            os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest"),
-        )
+        self.assertEqual(root_agent.model, MODEL)
         self.assertIsInstance(root_agent.instruction, str)
-        self.assertIn("{draft?}", root_agent.instruction)
+        self.assertIn("draft", root_agent.instruction)
 
 
 if __name__ == "__main__":

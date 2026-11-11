@@ -23,14 +23,11 @@ from collections import Counter
 from pathlib import Path
 
 from dotenv import load_dotenv
-from google.adk.runners import InMemoryRunner
-from google.genai import types
-
+from agents.model_runner import execute_agent
 from agents.verifier import check_verifier_output, make_verifier_input, verifier_agent
 from notebooks.eval_harness import load_medaesqa, verifier_agreement
 
 OUT = Path(__file__).resolve().parent.parent / "data" / "verifier_calibration.csv"
-APP, USER = "verifier_calibration", "calibration"
 SUPPORTED, UNSUPPORTED = {"supporting"}, {"neutral", "contradicting"}
 CITATION = re.compile(r"\s*\[[\d,\s]+\]")
 FIELDS = ["id", "relation", "human_label", "verifier_label",
@@ -67,23 +64,19 @@ def sample_balanced(pairs, n, seed=42):
     return sample
 
 
-async def verify(runner, evidence, sentence, retries=3):
-    message = types.Content(role="user", parts=[types.Part(text=make_verifier_input(evidence, sentence))])
-    for attempt in range(retries):
-        try:
-            session = await runner.session_service.create_session(app_name=APP, user_id=USER)
-            async for _ in runner.run_async(user_id=USER, session_id=session.id, new_message=message):
-                pass
-            session = await runner.session_service.get_session(
-                app_name=APP, user_id=USER, session_id=session.id)
-            # Re-derive pass flags from the issues so the model can't contradict itself
-            return check_verifier_output(session.state["verifier_feedback"])
-        except Exception as e:
-            if attempt == retries - 1:
-                raise
-            wait = 10 * (attempt + 1)
-            print(f"  retrying in {wait}s ({type(e).__name__})")
-            await asyncio.sleep(wait)
+async def verify(evidence, sentence):
+    verifier_input = make_verifier_input(evidence, sentence)
+    result = await execute_agent(
+        verifier_agent,
+        {
+            "original_text": evidence,
+            "simplified_text": sentence,
+            "clinical_atoms": [],
+            "target_grade_level": 8,
+        },
+        verifier_input,
+    )
+    return check_verifier_output(result["verifier_feedback"])
 
 
 def load_results():
@@ -99,18 +92,13 @@ async def run(n, seed):
     todo = [p for p in sample if p["id"] not in done]
     print(f"{len(sample)} pairs sampled, {len(done)} already saved, {len(todo)} to run")
 
-    runner = InMemoryRunner(agent=verifier_agent, app_name=APP)
     new_file = not OUT.exists()
     with open(OUT, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS)
         if new_file:
             writer.writeheader()
         for i, p in enumerate(todo, 1):
-            try:
-                fb = await verify(runner, p["evidence"], p["sentence"])
-            except Exception as e:
-                print(f"[{i}/{len(todo)}] {p['id']} failed: {e}")
-                continue
+            fb = await verify(p["evidence"], p["sentence"])
             writer.writerow({
                 **p,
                 "verifier_label": int(fb.faithfulness.passed and fb.unsupported_additions.passed),

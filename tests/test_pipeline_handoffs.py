@@ -36,7 +36,7 @@ class PipelineHandoffTests(unittest.IsolatedAsyncioTestCase):
         case = build_synthetic_case()
         calls = []
 
-        async def fake_executor(agent, app_name, state, prompt):
+        async def fake_executor(agent, _state, _prompt):
             calls.append(agent.name)
             if agent.name == "simplifier_agent":
                 return {"draft": "A patient-friendly draft."}
@@ -61,7 +61,7 @@ class PipelineHandoffTests(unittest.IsolatedAsyncioTestCase):
         calls = []
         verifier_calls = 0
 
-        async def fake_executor(agent, app_name, state, prompt):
+        async def fake_executor(agent, state, prompt):
             nonlocal verifier_calls
             calls.append((agent.name, state, prompt))
             if agent.name == "simplifier_agent":
@@ -134,7 +134,7 @@ class PipelineHandoffTests(unittest.IsolatedAsyncioTestCase):
     async def test_stops_after_configured_maximum_refinements(self):
         calls = []
 
-        async def fake_executor(agent, app_name, state, prompt):
+        async def fake_executor(agent, _state, _prompt):
             calls.append(agent.name)
             if agent.name == "simplifier_agent":
                 return {"draft": "Synthetic draft."}
@@ -161,7 +161,7 @@ class PipelineHandoffTests(unittest.IsolatedAsyncioTestCase):
         verifier_calls = 0
         refiner_input = {}
 
-        async def fake_executor(agent, app_name, state, prompt):
+        async def fake_executor(agent, state, prompt):
             nonlocal verifier_calls, refiner_input
             if agent.name == "simplifier_agent":
                 return {

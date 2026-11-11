@@ -1,19 +1,17 @@
-"""Run the FaithfulMed ADK handoffs with a bounded Verifier/Refiner loop."""
+"""Run the FaithfulMed agent handoffs with a bounded Verifier/Refiner loop."""
 
 import argparse
 import asyncio
 import json
-import uuid
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
-from google.adk.agents import LlmAgent
-from google.adk.runners import InMemoryRunner
-from google.genai import types
 from pydantic import BaseModel
 
 from agents.acceptance import assess_acceptance
 from agents.contracts import PipelineCase
+from agents.model_runner import AgentDefinition, execute_agent
+from agents.readability.agent import root_agent as readability
 from agents.refiner import refiner
 from agents.simplifier.agent import root_agent as simplifier
 from agents.verifier import (
@@ -21,12 +19,11 @@ from agents.verifier import (
     make_verifier_input,
     verifier_agent,
 )
-from agents.readability.agent import root_agent as readability
 
 
 MAX_REFINEMENTS = 2
 AgentExecutor = Callable[
-    [LlmAgent, str, dict[str, Any], str],
+    [AgentDefinition, dict[str, Any], str],
     Awaitable[dict[str, Any]],
 ]
 
@@ -68,49 +65,24 @@ SYNTHETIC_EXTRACTOR_OUTPUT = {
             "source_quote": "follow-up if symptoms worsen or persist",
         },
     ],
-    "not_found_types": [],
+    "not_found_types": [
+        "diagnosis_reasoning",
+        "risk",
+        "medical_history",
+        "family_history",
+        "environmental_history",
+        "demographic",
+        "medical_specialty",
+        "examination",
+        "examination_finding",
+        "lab_value",
+        "vital_sign",
+        "procedure",
+        "medication",
+        "referral",
+        "patient_education",
+    ],
 }
-
-
-async def execute_adk_agent(
-    agent: LlmAgent,
-    app_name: str,
-    state: dict[str, Any],
-    prompt: str,
-) -> dict[str, Any]:
-    """Run one ADK agent and return the resulting session state."""
-    print(f"[{agent.name}] Calling Gemini; waiting for response...", flush=True)
-    user_id = "faithfulmed-demo"
-    runner = InMemoryRunner(agent=agent, app_name=app_name)
-    session = await runner.session_service.create_session(
-        app_name=app_name,
-        user_id=user_id,
-        state=state,
-    )
-    async for event in runner.run_async(
-        user_id=user_id,
-        session_id=session.id,
-        new_message=types.Content(
-            role="user",
-            parts=[types.Part(text=prompt)],
-        ),
-    ):
-        error_code = getattr(event, "error_code", None)
-        if error_code:
-            raise RuntimeError(
-                f"ADK agent {agent.name!r} failed ({error_code}): "
-                f"{getattr(event, 'error_message', 'No error message provided')}"
-            )
-
-    completed_session = await runner.session_service.get_session(
-        app_name=app_name,
-        user_id=user_id,
-        session_id=session.id,
-    )
-    if completed_session is None:
-        raise RuntimeError(f"ADK session {session.id!r} disappeared before completion")
-    print(f"[{agent.name}] Finished.", flush=True)
-    return completed_session.state
 
 
 def _as_mapping(value: Any, label: str) -> dict[str, Any]:
@@ -118,7 +90,9 @@ def _as_mapping(value: Any, label: str) -> dict[str, Any]:
         return value.model_dump(mode="json")
     if isinstance(value, Mapping):
         return dict(value)
-    raise TypeError(f"{label} must be a mapping or Pydantic model, got {type(value).__name__}")
+    raise TypeError(
+        f"{label} must be a mapping or Pydantic model, got {type(value).__name__}"
+    )
 
 
 async def run_pipeline(
@@ -126,22 +100,15 @@ async def run_pipeline(
     *,
     max_refinements: int = MAX_REFINEMENTS,
     exercise_refiner: bool = False,
-    agent_executor: AgentExecutor = execute_adk_agent,
+    agent_executor: AgentExecutor = execute_agent,
 ) -> dict[str, Any]:
-    """Run Simplifier -> Readability -> Verifier and bounded Refiner handoffs.
-
-    exercise_refiner appends a deliberately false certainty claim to the
-    synthetic candidate so the Verifier and Refiner path can be demonstrated.
-    """
+    """Run Simplifier -> Readability -> Verifier and bounded Refiner handoffs."""
     if max_refinements < 0:
         raise ValueError("max_refinements cannot be negative")
 
-    run_id = uuid.uuid4().hex[:12]
-    base_state = case.to_adk_state()
-
+    base_state = case.to_state()
     simplifier_state = await agent_executor(
         simplifier,
-        f"faithfulmed_simplifier_{run_id}",
         base_state,
         "Create a patient-friendly explanation from the supplied source and clinical atoms.",
     )
@@ -150,20 +117,20 @@ async def run_pipeline(
         raise RuntimeError("Simplifier did not produce non-empty 'draft' output")
     draft = draft.strip()
 
-    readability_input = {
-        **base_state,
-        "draft": draft,
-        "protected_facts": case.protected_facts,
-    }
     readability_state = await agent_executor(
         readability,
-        f"faithfulmed_readability_{run_id}",
-        readability_input,
+        {
+            **base_state,
+            "draft": draft,
+            "protected_facts": case.protected_facts,
+        },
         "Improve the readability of the supplied patient-facing draft.",
     )
     candidate = readability_state.get("readability_draft")
     if not isinstance(candidate, str) or not candidate.strip():
-        raise RuntimeError("Readability agent did not produce non-empty 'readability_draft'")
+        raise RuntimeError(
+            "Readability agent did not produce non-empty 'readability_draft'"
+        )
     candidate = candidate.strip()
     readability_candidate = candidate
     if exercise_refiner:
@@ -190,7 +157,6 @@ async def run_pipeline(
         )
         verifier_state = await agent_executor(
             verifier_agent,
-            f"faithfulmed_verifier_{run_id}_{refinements}",
             {
                 **base_state,
                 "original_text": case.source_text,
@@ -199,10 +165,11 @@ async def run_pipeline(
             },
             verifier_input,
         )
-        raw_feedback = verifier_state.get("verifier_feedback")
-        feedback = _as_mapping(raw_feedback, "Verifier output")
-        checked_feedback = check_verifier_output(feedback)
-        feedback = checked_feedback.model_dump(mode="json")
+        feedback = _as_mapping(
+            verifier_state.get("verifier_feedback"),
+            "Verifier output",
+        )
+        feedback = check_verifier_output(feedback).model_dump(mode="json")
         acceptance = assess_acceptance(
             case.source_text,
             candidate,
@@ -213,26 +180,20 @@ async def run_pipeline(
             initial_feedback = dict(feedback)
             initial_acceptance = acceptance
 
-        needs_refinement = not feedback["overall_pass"]
-        if not needs_refinement or refinements >= max_refinements:
+        if feedback["overall_pass"] or refinements >= max_refinements:
             break
 
-        print(
-            f"[Refiner] Verifier found issues; running refinement {refinements + 1}/"
-            f"{max_refinements}...",
-            flush=True,
-        )
         feedback_for_refiner = {**feedback, "overall_pass": False}
-        refiner_input = case.refiner_state(candidate, feedback_for_refiner)
         refiner_state = await agent_executor(
             refiner,
-            f"faithfulmed_refiner_{run_id}_{refinements + 1}",
-            refiner_input,
+            case.refiner_state(candidate, feedback_for_refiner),
             "Refine the current explanation using the verifier feedback.",
         )
         refined = refiner_state.get("simplified_text")
         if not isinstance(refined, str) or not refined.strip():
-            raise RuntimeError("Refiner did not produce non-empty 'simplified_text' output")
+            raise RuntimeError(
+                "Refiner did not produce non-empty 'simplified_text' output"
+            )
         candidate = refined.strip()
         refinements += 1
 
@@ -286,7 +247,6 @@ async def _main() -> None:
         ),
     )
     args = parser.parse_args()
-
     result = await run_pipeline(
         build_synthetic_case(),
         max_refinements=args.max_refinements,

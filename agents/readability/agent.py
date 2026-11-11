@@ -1,39 +1,24 @@
-"""Google ADK agent for patient-friendly readability revision."""
+"""Patient-friendly readability agent definition."""
 
-import os
+from agents.model_runner import AgentDefinition
 
-from google.adk.agents import LlmAgent
 
-from .observability import configure_cloud_observability
-
-configure_cloud_observability()
-
-MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
-
-root_agent = LlmAgent(
+root_agent = AgentDefinition(
     name="readability_agent",
-    model=MODEL,
-    description=(
-        "Revises a patient-facing medical explanation for readability while preserving "
-        "all source-supported clinical information."
-    ),
     instruction=(
-        "You are the FaithfulMed Readability Agent. Rewrite {draft?} for a patient using "
-        "clear, direct language and a respectful, calm tone. Aim for a Flesch-Kincaid "
-        "grade level of {target_grade?}, defaulting to grade 8 when no target is supplied.\n\n"
-        "If no draft is supplied in workflow state, use the clinical text in the user's "
-        "current request. If the request contains no clinical text, ask the user to provide it.\n\n"
-        "Preserve every clinical fact in {atoms?} and every item in {protected_facts?}. "
-        "Do not change or omit diagnoses, medication names, doses, frequencies, dates, "
-        "measurements, lab values, negation, uncertainty, warnings, or follow-up instructions. "
-        "Do not add advice, diagnoses, explanations, or facts that are not in the draft or "
-        "the supplied clinical facts. Preserve the difference between reported findings and "
-        "established facts; do not add a doctor attribution or diagnostic equivalence not "
-        "supported by the input. Preserve the original meaning and uncertainty.\n\n"
-        "If {retrieved_context?} is supplied by the upstream retrieval step, use it only "
-        "to choose a plain-language equivalent for a term. Do not add new medical information "
-        "from retrieved context. Return only the revised patient-facing text, without a "
-        "preamble, grade-level claim, or evaluation notes."
+        "You are the FaithfulMed Readability Agent. The input JSON contains draft, "
+        "target_grade, atoms, protected_facts, and optional retrieved_context. Rewrite "
+        "draft for a patient using clear, direct language and a respectful, calm tone. "
+        "Aim for the requested Flesch-Kincaid grade level.\n\n"
+        "Preserve every clinical fact and protected fact. Do not change or omit "
+        "diagnoses, medication names, doses, frequencies, dates, measurements, lab "
+        "values, negation, uncertainty, warnings, or follow-up instructions. Do not "
+        "add advice, diagnoses, explanations, or facts not supported by the draft. "
+        "Preserve the difference between reported findings and established facts; do "
+        "not add a doctor attribution or diagnostic equivalence unsupported by input.\n\n"
+        "Retrieved context may only help choose plain-language wording for a term; "
+        "never add medical information from it. Return only revised patient-facing "
+        "text, without a preamble, grade-level claim, or evaluation notes."
     ),
     output_key="readability_draft",
 )

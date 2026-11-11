@@ -37,128 +37,58 @@
 * How to access the dataset(s)
 * How to run the notebook or scripts
 
-### Readability agent
+### Agent pipeline and local UI
 
-The Readability agent is a standalone Google ADK agent in `agents/readability/`.
-See the [Readability Agent README](agents/readability/README.md) for complete
-PowerShell setup, run, evaluation, and multi-agent integration instructions.
-Its output is measured independently of the model using Flesch-Kincaid grade level
-(the project's primary <= 8 target), Flesch Reading Ease, SMOG, Coleman-Liau,
-Automated Readability Index, Gunning Fog, Dale-Chall, sentence length, and a
-difficult-word ratio. The difficult-word ratio is a general vocabulary proxy, not
-a medical-jargon detector. These formulas are complementary signals, not
-interchangeable grade-level guarantees.
+The agents call Gemini directly through `google-genai`; orchestration and
+handoffs are managed by the project code rather than an agent framework. The
+shared `PipelineCase` validates Extractor atoms and adapts them for the
+Simplifier, Readability, Verifier, and Refiner. See the [Simplifier README](agents/simplifier/README.md)
+and [Readability README](agents/readability/README.md) for details.
 
-Run its ADK development UI from the repository root:
+Install dependencies and run the local workbench from the repository root:
 
 ```powershell
-Remove-Item Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
-$env:GEMINI_API_KEY = $null
-$secureKey = Read-Host -AsSecureString "Gemini API key"
-$env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
-adk web agents
-```
-
-Set the key in the same PowerShell session used to start ADK. The Google Gen AI
-SDK prefers `GOOGLE_API_KEY` if both it and `GEMINI_API_KEY` are set, so remove
-any stale `GOOGLE_API_KEY` first. Restart ADK after changing keys. If a key was
-shared in chat or logs, revoke it in AI Studio and use a replacement.
-
-The evaluator can score the checked-in MTSamples baseline or another CSV with a
-text column:
-
-```powershell
-python -m agents.readability.evaluate data/mtsamples_baseline_outputs.csv
-python -m unittest discover -s tests
-```
-
-On the currently checked-in 50-output baseline, this evaluator reports 72% at or
-below grade 8 by Flesch-Kincaid (mean grade 7.65). Mean SMOG is 10.48; the other
-readability measures are included in the evaluator output. These are baseline
-measurements, not evidence that the Readability agent has improved the outputs.
-
-`assess_candidate` checks caller-supplied protected clinical facts after generation.
-If any are missing, it returns the original draft and marks the result
-`preservation_failed`; it does not silently accept the rewrite. Use short,
-specific protected facts such as medication names, doses, lab values, dates, and
-instructions. The final Verifier should still validate the accepted readability
-output.
-
-The Readability agent accepts optional `retrieved_context` from the upstream
-Simplifier/RAG step; it does not create or query a retrieval index. To export ADK
-spans and structured telemetry to Google Cloud Trace and Cloud Logging, set
-`FAITHFULMED_CLOUD_OBSERVABILITY=true`, configure Google Cloud Application Default
-Credentials with permissions for the selected project, then start `adk web agents`.
-Telemetry does not enable prompt-content capture. Do not enable content capture for
-clinical text unless the data handling policy explicitly permits it.
-
-References: [ADK LLM agents](https://adk.dev/agents/llm-agents/),
-[ADK observability](https://adk.dev/observability/), and
-[ADK traces](https://adk.dev/observability/traces/).
-
-### Shared agent contract and Simplifier
-
-The shared `PipelineCase` in `agents/contracts.py` adapts Extractor notebook
-output to the current Verifier and Refiner input formats. The ADK Simplifier is
-in `agents/simplifier/`; its output key is `draft`. See the
-[Simplifier README](agents/simplifier/README.md) for the contract and handoff
-sequence. All agent modules read `FAITHFULMED_MODEL` so an initial multi-agent
-test can use one configured model.
-
-The repository includes ChromaDB as a dependency, but does not yet include a
-working vector-index ingestion or query implementation. Retrieval is optional
-for the first end-to-end test: run with an empty `retrieved_context`, then add
-RAG when the source corpus, indexing process, and retrieval evaluation are ready.
-Run the synthetic multi-agent handoff from the
-[Simplifier README](agents/simplifier/README.md) with
-`python -m agents.run_pipeline`; it requires a valid Gemini API key and makes
-live model calls.
-
-### Local multi-agent review UI
-
-Run the Gradio UI backed by the same ADK agent runner:
-
-```powershell
-Remove-Item Env:GOOGLE_API_KEY -ErrorAction SilentlyContinue
-$env:GEMINI_API_KEY = $null
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
 $secureKey = Read-Host -AsSecureString "Gemini API key"
 $env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
 $env:FAITHFULMED_MODEL = "gemini-3.5-flash-lite"
 .\.venv\Scripts\python.exe -m agents.ui
 ```
 
-Open the local address printed by Gradio (normally `http://127.0.0.1:7860`).
-The UI shows Simplifier and Readability outputs, initial/final Verifier
-feedback, Refiner count, deterministic safety checks, and final review status.
-The optional dataset picker loads up to eight of the longest local MTSamples
-transcriptions and eight detailed MedAESQA expert answers from `data/`. Loading
-only fills the source field; submitting the pipeline sends that text to the
-configured model. MedAESQA answers are QA responses, not clinical notes, and
-should be treated as supplementary test material rather than extractor gold.
-MTSamples is de-identified but should still be handled carefully.
-Use synthetic or approved de-identified notes only. The output is always marked
-**HUMAN REVIEW REQUIRED**; a Verifier pass is not proof of clinical correctness.
-The Refiner runs only when the Verifier reports issues. Deterministic findings
-remain visible and require human review, but do not alone trigger retries; this
-avoids asking the Refiner to restore every number in a detailed source note when
-the Verifier considers the candidate acceptable. The Readability output and
-Verifier candidate are expected to match unless the Refiner demo checkbox is
-used; the Refiner may also make minimal changes or leave text unchanged.
-The optional live adversarial suite uses seven Gemini calls. Keep the UI bound to
-localhost and stop it with Ctrl+C when finished.
+Open the localhost URL printed by Gradio (normally `http://127.0.0.1:7860`).
+Use **Run next in sequence** to proceed through Extractor → Simplifier →
+Readability → Verifier, with Refiner inserted when Verifier reports issues.
+Or select and run an individual agent. Each result shows that agent's exact
+input, output, and next handoff. After Refiner, run Verifier again; refinement
+is capped at two runs. Reset starts a fresh sequence. Changing the note or
+settings requires rerunning Extractor to prevent stale inputs.
 
-Run offline checks, including tests for reporting-status changes, certainty,
-negation, doses, timing, omissions, additions, and bounded handoffs:
+Dataset examples are read from this machine and are not sent until an agent is
+run. If MedlinePlus retrieval is enabled, its query is also sent to Gemini for
+embedding. Use synthetic or approved de-identified notes only, and keep the
+interface bound to localhost. Every run requires human review; a passing
+Verifier is not proof of clinical correctness. The optional MedlinePlus index is
+local and not committed; retrieved definitions may help explain terminology
+but never establish patient-specific facts.
 
-```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_acceptance tests.test_pipeline_handoffs tests.test_ui
-```
+The Readability output is measured independently using Flesch-Kincaid grade
+(the primary <= 8 target), Flesch Reading Ease, SMOG, Coleman-Liau, Automated
+Readability Index, Gunning Fog, Dale-Chall, sentence length, and difficult-word
+ratio. These are complementary estimates, not guarantees; difficult-word ratio
+is not a medical-jargon detector. `assess_candidate` checks protected facts and
+keeps a failed rewrite from silently replacing its input.
 
-To evaluate the live Verifier on the synthetic adversarial set:
+Run the synthetic pipeline or offline tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m agents.evaluate_verifier_cases
+.\.venv\Scripts\python.exe -m agents.run_pipeline
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
+
+The pipeline and handoff tests use injected fake executors and need no Gemini
+key. `python -m agents.evaluate_verifier_cases` runs live synthetic cases and
+uses Gemini API quota.
 
 ---
 

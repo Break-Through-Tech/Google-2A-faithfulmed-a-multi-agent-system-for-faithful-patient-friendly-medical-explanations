@@ -89,8 +89,8 @@ class PipelineCase(BaseModel):
             target_grade=target_grade,
         )
 
-    def to_adk_state(self) -> dict[str, Any]:
-        """Return state values used by Extractor, Simplifier, and Readability agents."""
+    def to_state(self) -> dict[str, Any]:
+        """Return JSON-compatible state values shared by the pipeline agents."""
         return {
             "source_text": self.source_text,
             "atoms": [atom.model_dump() for atom in self.atoms],

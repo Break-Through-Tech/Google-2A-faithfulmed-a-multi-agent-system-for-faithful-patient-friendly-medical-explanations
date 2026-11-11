@@ -1,18 +1,7 @@
-import os
-
-from google.adk.agents import LlmAgent
-
-MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
+from agents.model_runner import AgentDefinition
 
 REFINER_INSTRUCTION = """
-Original medical text:
-{original_text}
-
-Current simplified explanation:
-{simplified_text}
-
-Verifier feedback:
-{verifier_feedback}
+The input JSON contains original_text, simplified_text, and verifier_feedback.
 
 If overall_pass is true, return the simplified text unchanged.
 
@@ -44,9 +33,8 @@ Use patient-friendly language at or below an eighth-grade reading level.
 Output only the corrected explanation.
 """
 
-refiner = LlmAgent(
+refiner = AgentDefinition(
     name="Refiner",
-    model=MODEL,
     instruction=REFINER_INSTRUCTION,
     output_key="simplified_text",
 )

@@ -1,13 +1,11 @@
 """Verifier agent for checking simplified medical text."""
 
-import os
 from typing import List, Literal, Optional
 
-from google.adk.agents import LlmAgent
 from pydantic import BaseModel, Field, field_validator
 
+from agents.model_runner import AgentDefinition
 
-MODEL = os.getenv("FAITHFULMED_MODEL", "gemini-flash-latest")
 
 
 class ClinicalAtom(BaseModel):
@@ -68,7 +66,10 @@ def make_verifier_input(
     data = VerifierInput(
         original_text=original_text,
         simplified_text=simplified_text,
-        clinical_atoms=clinical_atoms or [],
+        clinical_atoms=[
+            ClinicalAtom.model_validate(atom)
+            for atom in clinical_atoms or []
+        ],
         target_grade_level=target_grade_level,
     )
     return data.model_dump_json(indent=2)
@@ -134,10 +135,8 @@ Return only the structured output. Do not include markdown fences.
 """
 
 
-verifier_agent = LlmAgent(
+verifier_agent = AgentDefinition(
     name="verifier_agent",
-    model=MODEL,
-    description="Checks medical simplifications for accuracy and readability.",
     instruction=VERIFIER_INSTRUCTIONS,
     output_schema=VerifierOutput,
     output_key="verifier_feedback",

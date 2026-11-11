@@ -110,7 +110,7 @@ def assess_candidate(
 ) -> ReadabilityAssessment:
     """Evaluate a rewrite and fall back to the original if protected facts were lost.
 
-    Call this after the ADK agent. A non-passing status must remain visible to the
+    Call this after the Readability agent. A non-passing status must remain visible to the
     caller; the function never treats a failed rewrite as an accepted simplification.
     """
     if not original_draft.strip():

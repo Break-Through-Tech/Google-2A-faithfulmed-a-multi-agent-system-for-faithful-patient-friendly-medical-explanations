@@ -1,19 +1,17 @@
-"""Run the synthetic adversarial cases against the live ADK Verifier."""
+"""Run the synthetic adversarial cases against the live Gemini Verifier."""
 
 import asyncio
 import json
-import uuid
 from collections.abc import Mapping
 
 from agents.adversarial_cases import ADVERSARIAL_CASES
-from agents.run_pipeline import _as_mapping, execute_adk_agent
+from agents.model_runner import execute_agent
 from agents.verifier import check_verifier_output, make_verifier_input, verifier_agent
 
 
 async def evaluate_cases() -> dict[str, object]:
-    run_id = uuid.uuid4().hex[:8]
     results = []
-    for index, case in enumerate(ADVERSARIAL_CASES, start=1):
+    for case in ADVERSARIAL_CASES:
         state = {
             "original_text": case["source_text"],
             "simplified_text": case["candidate_text"],
@@ -23,14 +21,15 @@ async def evaluate_cases() -> dict[str, object]:
             original_text=case["source_text"],
             simplified_text=case["candidate_text"],
         )
-        agent_state = await execute_adk_agent(
+        agent_state = await execute_agent(
             verifier_agent,
-            f"faithfulmed_adversarial_{run_id}_{index}",
             state,
             prompt,
         )
-        feedback = _as_mapping(agent_state.get("verifier_feedback"), "Verifier output")
-        feedback = check_verifier_output(feedback).model_dump(mode="json")
+        feedback = agent_state.get("verifier_feedback")
+        if not isinstance(feedback, Mapping):
+            raise TypeError("Verifier output must be a mapping.")
+        feedback = check_verifier_output(dict(feedback)).model_dump(mode="json")
         check = feedback.get(case["category"])
         if not isinstance(check, Mapping):
             raise RuntimeError(

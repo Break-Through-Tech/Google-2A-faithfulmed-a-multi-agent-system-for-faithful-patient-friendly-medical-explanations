@@ -10,10 +10,10 @@ class SimplifierAgentTests(unittest.TestCase):
     def test_treats_retrieval_as_optional_general_context(self):
         instruction = root_agent.instruction
 
-        self.assertIn("{source_text?}", instruction)
-        self.assertIn("{atoms?}", instruction)
-        self.assertIn("{retrieved_context?}", instruction)
-        self.assertIn("If retrieved_context is absent or empty", instruction)
+        self.assertIn("source_text", instruction)
+        self.assertIn("atoms", instruction)
+        self.assertIn("optional retrieved_context", instruction)
+        self.assertIn("only help choose plain-language wording", instruction)
 
 
 if __name__ == "__main__":
