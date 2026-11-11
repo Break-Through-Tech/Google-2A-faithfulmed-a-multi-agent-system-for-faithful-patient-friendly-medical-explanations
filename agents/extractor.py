@@ -255,6 +255,8 @@ def extract_atoms(
 
     input_json = "\n\nINPUT JSON:\n" + json.dumps({"clinical_note": source_text})
     prompt = EXTRACTOR_INSTRUCTIONS + input_json
+    if types is None:
+        raise ImportError("Install the existing google-genai dependency first.")
     response = client.models.generate_content(
         model=MODEL,
         contents=prompt,
@@ -266,10 +268,13 @@ def extract_atoms(
             ),
         ),
     )
-    if not response.text:
+    if response is None:
+        raise ValueError("Gemini returned an empty response.")
+    response_text = response.text
+    if not response_text:
         raise ValueError("Gemini returned an empty response.")
     try:
-        model_output = json.loads(response.text)
+        model_output = json.loads(response_text)
     except json.JSONDecodeError as error:
         raise ValueError("Gemini returned invalid JSON.") from error
     return validate_output(model_output, source_text)
