@@ -7,7 +7,7 @@
 | Name             | GitHub Handle | Contribution                                                             |
 |------------------|---------------|--------------------------------------------------------------------------|
 | Aanchal Puri     | @aanchalpuri  | Developed the vector retrieval index using Gemini embeddings and ChromaDB (RAG pipeline) over the MedlinePlus glossary and health guidelines  |
-| Arshiya Salehi   | @arshiya-salehi | .... |
+| Arshiya Salehi   | @arshiya-salehi | Developing the UI and connecting the agent to work with each other, and also worked on Synthia data generation. |
 | Rudra Patel      | @rudra-045    | Added refusal detection and aggregate scoring to the shared evaluation harness; integrated and evaluated the 50 single-agent Gemini baseline outputs. |
 | Jia Panjwani     | @jiap6        | .... |
 | Aliaa Mahgoub    | @AliaaMahgoub | Performed MedlinePlus exploratory data analysis, contributed to vector retrieval index with Aanchal, developed and tested extractor agent|
