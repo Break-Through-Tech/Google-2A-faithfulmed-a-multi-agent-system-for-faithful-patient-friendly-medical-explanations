@@ -1,7 +1,8 @@
-# ── Google GCP-first stack ─────────────────────────────────────────────
-google-genai          # unified Gemini SDK (Google AI Studio + Vertex AI)
-google-adk            # Agent Development Kit — multi-agent orchestration
-litellm               # lets ADK call Gemma / external open models for the leaderboard
+# ── Gemini SDK and observability ────────────────────────────────────────
+google-genai
+pydantic>=2
+python-dotenv
+opentelemetry-api     # spans for readability scoring
 
 # ── RAG / retrieval ────────────────────────────────────────────────────
 chromadb
@@ -25,5 +26,4 @@ gradio
 # streamlit            # alternative demo framework
 
 # ── Optional alternatives ──────────────────────────────────────────────
-# langgraph            # alternative orchestration to ADK
-# groq                 # one external open model (Llama-3) for the leaderboard
+# Add provider SDKs here only if the project expands beyond Gemini.

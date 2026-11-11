@@ -2,11 +2,10 @@
 
 from typing import List, Literal, Optional
 
-from google.adk.agents import LlmAgent
 from pydantic import BaseModel, Field, field_validator
 
+from agents.model_runner import AgentDefinition
 
-MODEL = "gemini-3-flash-preview"
 
 
 class ClinicalAtom(BaseModel):
@@ -67,7 +66,10 @@ def make_verifier_input(
     data = VerifierInput(
         original_text=original_text,
         simplified_text=simplified_text,
-        clinical_atoms=clinical_atoms or [],
+        clinical_atoms=[
+            ClinicalAtom.model_validate(atom)
+            for atom in clinical_atoms or []
+        ],
         target_grade_level=target_grade_level,
     )
     return data.model_dump_json(indent=2)
@@ -109,6 +111,14 @@ omissions, but verify them against original_text before using them. Do not
 assume the extracted atoms are complete or correct. General definitions are
 acceptable only when they do not introduce unsupported clinical claims.
 
+Preserve evidence status and attribution. A patient-reported or patient-denied
+finding is not automatically an established clinical fact: for example,
+"no fever is reported" must not become "the patient does not have a fever"
+unless the source establishes that stronger claim. Do not add a doctor or
+clinician attribution, a common-cold equivalence, or other explanatory diagnosis
+unless supported by the source. Treat changing "suspected" to "confirmed" as a
+high-severity faithfulness failure.
+
 For each issue, give a short description and severity (low, medium, high).
 Include a brief source quote when relevant, and the problematic simplified
 phrase when available. Use atom_id only if the issue maps to a supplied atom.
@@ -125,10 +135,8 @@ Return only the structured output. Do not include markdown fences.
 """
 
 
-verifier_agent = LlmAgent(
+verifier_agent = AgentDefinition(
     name="verifier_agent",
-    model=MODEL,
-    description="Checks medical simplifications for accuracy and readability.",
     instruction=VERIFIER_INSTRUCTIONS,
     output_schema=VerifierOutput,
     output_key="verifier_feedback",

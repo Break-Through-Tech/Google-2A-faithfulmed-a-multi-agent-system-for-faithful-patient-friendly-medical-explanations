@@ -37,6 +37,59 @@
 * How to access the dataset(s)
 * How to run the notebook or scripts
 
+### Agent pipeline and local UI
+
+The agents call Gemini directly through `google-genai`; orchestration and
+handoffs are managed by the project code rather than an agent framework. The
+shared `PipelineCase` validates Extractor atoms and adapts them for the
+Simplifier, Readability, Verifier, and Refiner. See the [Simplifier README](agents/simplifier/README.md)
+and [Readability README](agents/readability/README.md) for details.
+
+Install dependencies and run the local workbench from the repository root:
+
+```powershell
+py -3 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+$secureKey = Read-Host -AsSecureString "Gemini API key"
+$env:GEMINI_API_KEY = [System.Net.NetworkCredential]::new("", $secureKey).Password
+$env:FAITHFULMED_MODEL = "gemini-3.5-flash-lite"
+.\.venv\Scripts\python.exe -m agents.ui
+```
+
+Open the localhost URL printed by Gradio (normally `http://127.0.0.1:7860`).
+Use **Run next in sequence** to proceed through Extractor → Simplifier →
+Readability → Verifier, with Refiner inserted when Verifier reports issues.
+Or select and run an individual agent. Each result shows that agent's exact
+input, output, and next handoff. After Refiner, run Verifier again; refinement
+is capped at two runs. Reset starts a fresh sequence. Changing the note or
+settings requires rerunning Extractor to prevent stale inputs.
+
+Dataset examples are read from this machine and are not sent until an agent is
+run. If MedlinePlus retrieval is enabled, its query is also sent to Gemini for
+embedding. Use synthetic or approved de-identified notes only, and keep the
+interface bound to localhost. Every run requires human review; a passing
+Verifier is not proof of clinical correctness. The optional MedlinePlus index is
+local and not committed; retrieved definitions may help explain terminology
+but never establish patient-specific facts.
+
+The Readability output is measured independently using Flesch-Kincaid grade
+(the primary <= 8 target), Flesch Reading Ease, SMOG, Coleman-Liau, Automated
+Readability Index, Gunning Fog, Dale-Chall, sentence length, and difficult-word
+ratio. These are complementary estimates, not guarantees; difficult-word ratio
+is not a medical-jargon detector. `assess_candidate` checks protected facts and
+keeps a failed rewrite from silently replacing its input.
+
+Run the synthetic pipeline or offline tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m agents.run_pipeline
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+```
+
+The pipeline and handoff tests use injected fake executors and need no Gemini
+key. `python -m agents.evaluate_verifier_cases` runs live synthetic cases and
+uses Gemini API quota.
+
 ---
 
 ## 🏗️ **Project Overview**

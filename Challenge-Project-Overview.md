@@ -11,7 +11,7 @@
 ---
 
 ## 🏢 About Google
-Google is a global technology leader focused on organizing the world's information and making it universally accessible and useful. Health information is one of the hardest categories to make truly *accessible*: the source material (clinical notes, lab reports, discharge instructions) is written for clinicians, not patients. This project sits at the intersection of two Google-relevant themes — trustworthy generative AI and equitable access to information — and is built on Google's own open stack (Gemini, Gemma, and the Agent Development Kit).
+Google is a global technology leader focused on organizing the world's information and making it universally accessible and useful. Health information is one of the hardest categories to make truly *accessible*: the source material (clinical notes, lab reports, discharge instructions) is written for clinicians, not patients. This project sits at the intersection of two Google-relevant themes — trustworthy generative AI and equitable access to information — and uses Google's Gemini and Gemma models.
 
 ---
 
@@ -62,7 +62,7 @@ For teams that progress quickly:
 - **Domain expansion** — apply the pipeline to a high-impact subdomain (oncology discharge summaries, post-partum care instructions, pediatric medication labels).
 - **Tool-augmented agents** — give the Extractor a UMLS lookup tool and the Verifier a DrugBank lookup tool; measure whether tools improve verification accuracy.
 - **Multimodal clinical data integration** — use Gemini's native multimodality to process visual medical assets (e.g., radiology images or ECG waveforms) alongside textual records for joint explanations.
-- **Real-time guardrail middleware** — deploy the Verifier as an interceptor (via ADK callbacks) that flags unverified clinical claims *before* a final answer is shown.
+- **Real-time guardrail middleware** — run the Verifier as an explicit pipeline stage that flags unverified clinical claims before a final answer is shown.
 - **Counterfactual explanation visualizer** — an interactive module showing how changing a lab value or history item alters the multi-agent reasoning path.
 
 ### Project Milestones
@@ -71,7 +71,7 @@ Use these milestones to guide your work. Your team will create a GitHub Projects
 | Month | Milestone | Key Activities |
 |---|---|---|
 | September | Foundations & Single-Agent Baseline | • Onboard: GitHub repo, Google Colab, and **Google AI Studio** free Gemini API key; make one successful Gemini call.<br>• Exploratory data analysis on MedAESQA, MTSamples, PLABA, MedQuAD, and a Synthea sample.<br>• Build a **vector retrieval index** (Gemini embeddings + ChromaDB) over the MedlinePlus lay-language glossary and authoritative lay-health guidelines.<br>• Define the task spec, success rubric, and shared evaluation harness: Flesch-Kincaid, SMOG, medical-jargon density, output length, refusal rate.<br>• Build a **single-Gemini baseline (no agents)** on ~50 hand-curated examples — the comparison point for the multi-agent system.<br>• Each fellow chooses one of the five agents to own end-to-end. |
-| October | Multi-Agent Pipeline (ADK) & Verifier Calibration | • Build the pipeline with **Google ADK**: a `SequentialAgent` chaining five `LlmAgent`s (Extractor → Simplifier → Verifier → Refiner → Readability).<br>• **Extractor**: structured-output prompting returning clinical atoms with types.<br>• **Simplifier**: RAG over the MedlinePlus / guidelines index.<br>• **Verifier**: LLM-as-judge scoring faithfulness, omission, addition, and reading-level match.<br>• **Refiner ↔ Verifier**: a **bounded** `LoopAgent(max_iterations=2)` — no open-ended recursion.<br>• Calibrate the Verifier against **MedAESQA's human accuracy / evidence-support labels**; target ≥80% agreement (Cohen's κ ≥ 0.6).<br>• First end-to-end multi-agent vs. baseline comparison across Gemini + Gemma + one external open model. |
+| October | Multi-Agent Pipeline & Verifier Calibration | • Build an explicit ordered Python pipeline (Extractor → Simplifier → Readability → Verifier) with individual steps visible in the Gradio UI.<br>• **Extractor**: structured-output prompting returning clinical atoms with types.<br>• **Simplifier**: RAG over the MedlinePlus / guidelines index.<br>• **Verifier**: LLM-as-judge scoring faithfulness, omission, addition, and reading-level match.<br>• **Refiner ↔ Verifier**: a bounded loop of at most two refinements — no open-ended recursion.<br>• Calibrate the Verifier against **MedAESQA's human accuracy / evidence-support labels**; target ≥80% agreement (Cohen's κ ≥ 0.6).<br>• First end-to-end multi-agent vs. baseline comparison across Gemini + Gemma + one external open model. |
 | November | Ablations, Error Analysis & Leaderboard | • **Ablation studies**: drop one agent at a time and measure impact on each metric — this is the research contribution.<br>• **Error analysis**: which content types (lab values, drug names, procedures) produce the most hallucinations? Which agent catches them?<br>• **Leaderboard**: faithfulness, readability, latency, cost, and openness across all models.<br>• Begin the interactive demo (per-agent reasoning traces + evidence attributions). |
 | December | Demo, Report & Presentation | • Finish the **app demo** on Hugging Face Spaces (free) or Cloud Run, showing per-agent traces, faithfulness scores, and flagged passages.<br>• Final deliverables: reproducible Colab notebooks, technical report, FaithfulMed leaderboard, ablation table, and team presentation.<br>• Optional: arXiv paper draft. |
 
@@ -113,16 +113,16 @@ All datasets are public and either de-identified, synthetic, or expert-curated. 
 Extractor (atoms) → Simplifier (+RAG) → Verifier (LLM-judge) → Refiner → Readability, with a **bounded** Refiner↔Verifier loop.
 
 Two decisions that will save the team weeks — please take these seriously (they come directly from the SME technical review):
-1. **Use a deterministic DAG, not free-form recursive agent loops.** Open-ended "agents call agents until satisfied" designs are hard to debug, blow through rate limits, and produce non-reproducible traces. In **Google ADK** this is a `SequentialAgent` for the main flow plus a `LoopAgent(max_iterations=2)` for the one place you want iteration (Refiner↔Verifier). A plain ordered Python function is a fine v1 too.
-2. **Build the evaluation harness in Week 1–2, before the agents.** You can't improve what you can't measure. A starter lives in `notebooks/eval_harness.py`, and an ADK pipeline skeleton in `notebooks/adk_pipeline.py`.
+1. **Use a deterministic DAG, not free-form recursive agent loops.** Open-ended "agents call agents until satisfied" designs are hard to debug, blow through rate limits, and produce non-reproducible traces. Use explicit Python functions for each ordered stage and cap Verifier↔Refiner iterations at two.
+2. **Build the evaluation harness in Week 1–2, before the agents.** You can't improve what you can't measure. A starter lives in `notebooks/eval_harness.py`; the ordered pipeline and interactive step runner live in `agents/run_pipeline.py` and `agents/step_runner.py`.
 
 **Recommended stack (GCP-first):**
-- **Models:** **Gemini** (via Google AI Studio — free API key, no billing) as primary; **Gemma-2** open weights (runnable on the free Colab tier) for the open-model comparison; **one external open model** (e.g., Llama-3 via Groq, called through ADK's `LiteLlm`) to keep the leaderboard honest.
-- **Orchestration:** **`google-adk`** (Agent Development Kit) — `SequentialAgent`, `LoopAgent`, `LlmAgent`. Model-agnostic, so one harness runs every model. *(LangGraph or CrewAI are acceptable alternatives.)*
+- **Models:** **Gemini** (via Google AI Studio) as primary; **Gemma-2** open weights (runnable on the free Colab tier) for the open-model comparison; optionally compare one external open model through its provider's SDK.
+- **Orchestration:** Direct model calls through `google-genai` and ordered Python functions with explicit state handoffs. The Gradio workbench runs one stage at a time; the Verifier↔Refiner loop is bounded.
 - **RAG:** **Gemini `text-embedding-004`** + **ChromaDB** (offline fallback: `sentence-transformers` + `faiss-cpu`).
 - **Readability & agreement:** `textstat` (Flesch-Kincaid, SMOG), `scikit-learn` (Cohen's κ).
 - **Data / viz:** `pandas`, `numpy`, `openpyxl`, `matplotlib`, `seaborn`, `datasets`.
-- **Demo:** `gradio` or `streamlit` on Hugging Face Spaces (free); Cloud Run is the GCP-native alternative (needs billing). ADK's built-in dev UI (`adk web`) is great for showing agent traces during development.
+- **Demo:** `gradio` or `streamlit` on Hugging Face Spaces (free); Cloud Run is the GCP-native alternative (needs billing). The local Gradio workbench shows each agent's input, output, and handoff.
 
 **Evaluation metrics:**
 - Readability: Flesch-Kincaid Grade Level (primary), SMOG (secondary), medical-jargon density, output length, refusal rate.
@@ -148,7 +148,7 @@ Two decisions that will save the team weeks — please take these seriously (the
 **Google stack (start here):**
 - Google AI Studio (free Gemini key) — https://aistudio.google.com
 - Gemini API docs & `google-genai` SDK — https://ai.google.dev
-- **Agent Development Kit (ADK)** docs & samples — https://google.github.io/adk-docs
+- Gemini API docs & `google-genai` SDK — https://ai.google.dev/gemini-api/docs
 - Gemma open models — https://ai.google.dev/gemma
 - Vertex AI *(stretch; needs billing)* — https://cloud.google.com/vertex-ai
 
@@ -159,7 +159,7 @@ Two decisions that will save the team weeks — please take these seriously (the
 
 **Concepts to search:** LLM-as-a-judge (and its position/verbosity/self-preference biases); faithfulness / hallucination evaluation in summarization (FaithBench as a touchstone); Cohen's κ / inter-annotator agreement; FHIR basics (Condition, MedicationRequest, Procedure, CarePlan).
 
-**Starter code (this repo):** `notebooks/eval_harness.py`, `notebooks/adk_pipeline.py`, and `requirements.txt`.
+**Starter code (this repo):** `notebooks/eval_harness.py`, `agents/run_pipeline.py`, `agents/step_runner.py`, and `requirements.txt`.
 
 *Explore beyond these, and share anything interesting you find with the team!*
 
@@ -187,7 +187,7 @@ Two decisions that will save the team weeks — please take these seriously (the
 1. Read this overview and note questions for our first meeting.
 2. Clone the repo, install `requirements.txt` in Colab, get a free **Google AI Studio** key, and make one successful Gemini call.
 3. Download MedAESQA (see `data/README.md`); skim MTSamples and generate a few Synthea patients.
-4. Run `notebooks/eval_harness.py` and skim `notebooks/adk_pipeline.py` to see the pipeline shape.
+4. Run `notebooks/eval_harness.py` and inspect `agents/step_runner.py` to see the explicit stage handoffs.
 5. Read the GitHub Projects docs (https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects) and help set up the team board.
 6. Claim an agent — Extractor / Simplifier / Verifier / Refiner / Readability.
 
