@@ -19,7 +19,7 @@ if not (PROJECT_ROOT / "data").is_dir():
 
 DATA_PATH = PROJECT_ROOT / "data" / "mtsamples_baseline_outputs.csv"
 OUTPUT_PATH = PROJECT_ROOT / "data" / "extractor_outputs.jsonl"
-MODEL = "gemini-3.5-flash-lite"
+MODEL = "gemini-3.1-flash-lite"
 SOURCE_RECORD_NUMBER = 1
 
 ALLOWED_TYPES = {
