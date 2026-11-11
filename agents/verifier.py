@@ -6,7 +6,7 @@ from google.adk.agents import LlmAgent
 from pydantic import BaseModel, Field, field_validator
 
 
-MODEL = "gemini-3-flash-preview"
+MODEL = "gemini-3.5-flash-lite"
 
 
 class ClinicalAtom(BaseModel):
@@ -101,6 +101,9 @@ Evaluate four things:
    technical details that can be safely omitted for a patient-facing summary.
 3. Unsupported additions: Does the simplification add patient-specific facts,
    diagnoses, risks, or treatment advice not supported by the source?
+
+   Flag any person or role (doctor, health care team, nurse) that appears in the simplified text but not in the source.
+   
 4. Reading level: Is the wording understandable at the target grade level?
    Give an approximate grade estimate; do not present it as a measured score.
 
