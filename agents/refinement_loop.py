@@ -1,115 +1,81 @@
-import json
+"""Direct Gemini Verifier/Refiner loop for standalone use."""
 
-from google.adk.runners import InMemoryRunner
-from google.genai import types
+from collections.abc import Awaitable, Callable
+from typing import Any
 
-from agents.verifier import verifier_agent
+from agents.model_runner import AgentDefinition, execute_agent
 from agents.refiner import refiner
+from agents.verifier import (
+    check_verifier_output,
+    make_verifier_input,
+    verifier_agent,
+)
 
 
 MAX_ITERATIONS = 2
+AgentExecutor = Callable[
+    [AgentDefinition, dict[str, Any], str],
+    Awaitable[dict[str, Any]],
+]
 
 
 async def run_refinement_loop(
-    original_text,
-    simplified_text,
-    clinical_atoms=None,
-    target_grade_level=8,
-):
-    verifier_runner = InMemoryRunner(
-        agent=verifier_agent,
-        app_name="refinement_verifier",
-    )
+    original_text: str,
+    simplified_text: str,
+    clinical_atoms: list[dict[str, Any]] | None = None,
+    target_grade_level: int = 8,
+    *,
+    agent_executor: AgentExecutor = execute_agent,
+) -> dict[str, Any]:
+    """Verify a candidate, refine at most twice, and re-verify each revision."""
+    candidate = simplified_text.strip()
+    if not original_text.strip() or not candidate:
+        raise ValueError("Original and simplified text must not be empty.")
 
-    refiner_runner = InMemoryRunner(
-        agent=refiner,
-        app_name="refinement_refiner",
-    )
-
-    user_id = "test_user"
+    feedback: dict[str, Any] | None = None
     iterations = 0
-    feedback = None
-
     while True:
-        # Verify the current explanation
-        verifier_session = await verifier_runner.session_service.create_session(
-            app_name="refinement_verifier",
-            user_id=user_id,
-            state={
+        verifier_input = make_verifier_input(
+            original_text=original_text,
+            simplified_text=candidate,
+            clinical_atoms=clinical_atoms or [],
+            target_grade_level=target_grade_level,
+        )
+        result = await agent_executor(
+            verifier_agent,
+            {
                 "original_text": original_text,
-                "simplified_text": simplified_text,
+                "simplified_text": candidate,
+                "clinical_atoms": clinical_atoms or [],
+                "target_grade_level": target_grade_level,
             },
+            verifier_input,
         )
-
-        verifier_input = json.dumps({
-            "original_text": original_text,
-            "simplified_text": simplified_text,
-            "clinical_atoms": clinical_atoms if clinical_atoms is not None else [],
-            "target_grade_level": target_grade_level,
-        })
-
-        async for _ in verifier_runner.run_async(
-            user_id=user_id,
-            session_id=verifier_session.id,
-            new_message=types.Content(
-                role="user",
-                parts=[types.Part(text=verifier_input)],
-            ),
-        ):
-            pass
-
-        verifier_session = await verifier_runner.session_service.get_session(
-            app_name="refinement_verifier",
-            user_id=user_id,
-            session_id=verifier_session.id,
-        )
-
-        feedback = verifier_session.state["verifier_feedback"]
-
-        # Stop if verification passes
-        if feedback["overall_pass"]:
+        raw_feedback = result.get("verifier_feedback")
+        if not isinstance(raw_feedback, dict):
+            raise TypeError("Verifier output must be a mapping.")
+        feedback = check_verifier_output(raw_feedback).model_dump(mode="json")
+        if feedback["overall_pass"] or iterations >= MAX_ITERATIONS:
             break
 
-        # Stop if we've already used both refinement attempts
-        if iterations >= MAX_ITERATIONS:
-            break
-
-        # Refine using the Verifier's feedback
-        refiner_session = await refiner_runner.session_service.create_session(
-            app_name="refinement_refiner",
-            user_id=user_id,
-            state={
+        refined = await agent_executor(
+            refiner,
+            {
                 "original_text": original_text,
-                "simplified_text": simplified_text,
+                "simplified_text": candidate,
                 "verifier_feedback": feedback,
             },
+            "Refine the simplified medical explanation.",
         )
-
-        async for _ in refiner_runner.run_async(
-            user_id=user_id,
-            session_id=refiner_session.id,
-            new_message=types.Content(
-                role="user",
-                parts=[
-                    types.Part(
-                        text="Refine the simplified medical explanation."
-                    )
-                ],
-            ),
-        ):
-            pass
-
-        refiner_session = await refiner_runner.session_service.get_session(
-            app_name="refinement_refiner",
-            user_id=user_id,
-            session_id=refiner_session.id,
-        )
-
-        simplified_text = refiner_session.state["simplified_text"]
+        next_candidate = refined.get("simplified_text")
+        if not isinstance(next_candidate, str) or not next_candidate.strip():
+            raise RuntimeError("Refiner did not produce non-empty simplified text.")
+        candidate = next_candidate.strip()
         iterations += 1
 
+    assert feedback is not None
     return {
-        "simplified_text": simplified_text,
+        "simplified_text": candidate,
         "verifier_feedback": feedback,
         "overall_pass": feedback["overall_pass"],
         "iterations": iterations,
